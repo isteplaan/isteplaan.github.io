@@ -61,6 +61,8 @@ input:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, .12
 .welcome-card { display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; padding: 38px; border-radius: 22px; color: white; background: #17382f; }
 .welcome-card h1 { max-width: 650px; font-size: clamp(32px, 4vw, 48px); }
 .welcome-card p { max-width: 670px; margin: 14px 0 0; color: #cfddd5; line-height: 1.6; }
+.admin-shortcuts { display: flex; gap: 9px; }
+.admin-shortcuts .button--ghost { background: rgba(255,255,255,.13); color: #fff; }
 .placeholder-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 24px; }
 .placeholder-grid article { padding: 26px; border: 1px solid #dee7e0; border-radius: 18px; background: white; }
 .placeholder-grid article > span { font-size: 24px; color: #b3862e; }
@@ -138,6 +140,28 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .member-row > span { color: #8a978f; font-size: 12px; text-align: center; }
 .member-row input { padding: 10px 11px; }
 .member-row button { width: 32px; height: 32px; border: 0; border-radius: 9px; background: #f8e9e7; color: #9a3d35; font-size: 20px; cursor: pointer; }
+.users-modal { width: min(980px, 100%); }
+.user-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
+.user-stats > div { display: grid; place-items: center; padding: 14px; border-radius: 12px; background: #edf4ef; }
+.user-stats strong { color: #27634f; font-family: Manrope, sans-serif; font-size: 24px; }
+.user-stats span { color: #718078; font-size: 11px; }
+.user-search { margin-bottom: 14px; }
+.users-table { display: grid; gap: 10px; max-height: 58vh; overflow: auto; padding-right: 4px; }
+.user-card { padding: 15px; border: 1px solid #dfe8e1; border-radius: 14px; background: #fbfcfb; }
+.user-card--inactive { opacity: .58; }
+.user-identity { display: flex; align-items: center; gap: 10px; }
+.user-identity > span { width: 38px; height: 38px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 11px; background: #dfece4; color: #27634f; font-family: Manrope, sans-serif; font-weight: 800; }
+.user-identity > div { min-width: 0; flex: 1; display: grid; }
+.user-identity small { overflow: hidden; color: #75837b; text-overflow: ellipsis; }
+.user-identity > b { padding: 5px 8px; border-radius: 999px; background: #fff0c9; color: #765717; font-size: 10px; text-transform: uppercase; }
+.user-activity { display: grid; grid-template-columns: 1fr 1.4fr .7fr; gap: 8px; margin: 13px 0; }
+.user-activity > span { display: grid; gap: 2px; padding: 8px 10px; border-radius: 9px; background: #f0f4f1; font-size: 12px; font-weight: 700; }
+.user-activity small, .user-classes small { color: #7b8981; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.user-classes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.user-classes > div { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.user-classes > div > small { width: 100%; }
+.user-classes span { padding: 4px 7px; border-radius: 999px; background: #e5eee8; color: #365f50; font-size: 10px; font-weight: 700; }
+.user-classes em { color: #929e97; font-size: 11px; }
 
 .planner-page { position: fixed; z-index: 30; inset: 0; overflow: auto; background: #eef3ef; }
 .planner-topbar { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 3vw; border-bottom: 1px solid #dbe5dd; background: #fff; }
@@ -254,6 +278,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .topbar { padding: 0 20px; }
   .account > span:not(.badge) { display: none; }
   .welcome-card { align-items: flex-start; flex-direction: column; }
+  .admin-shortcuts { width: 100%; }
   .placeholder-grid { grid-template-columns: 1fr; }
   .dashboard { width: min(100% - 32px, 1180px); padding: 32px 0; }
   .class-section { padding: 24px 18px; }
@@ -262,6 +287,8 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .class-grid { grid-template-columns: 1fr; }
   .field-row, .student-list { grid-template-columns: 1fr; }
   .member-row { grid-template-columns: 22px 1fr 1fr 32px; gap: 5px; }
+  .user-stats { grid-template-columns: 1fr; }
+  .user-activity, .user-classes { grid-template-columns: 1fr; }
   .modal-backdrop { padding: 12px; }
   .modal { padding: 24px 20px; max-height: calc(100vh - 24px); }
   .planner-layout { grid-template-columns: 1fr; }
