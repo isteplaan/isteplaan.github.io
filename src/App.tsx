@@ -180,6 +180,7 @@ function App() {
   const [planName, setPlanName] = useState('')
   const [savingPlan, setSavingPlan] = useState(false)
   const [presentationMode, setPresentationMode] = useState(false)
+  const [printOnly, setPrintOnly] = useState(false)
   const [drawing, setDrawing] = useState(false)
   const [revealCount, setRevealCount] = useState(0)
   const [animationTick, setAnimationTick] = useState(0)
@@ -190,7 +191,7 @@ function App() {
   const [userSearch, setUserSearch] = useState('')
   const [showArchive, setShowArchive] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
-  const [helpSection, setHelpSection] = useState<ActivityType>('seating')
+  const [helpSection, setHelpSection] = useState<ActivityType | 'teaching-groups'>('seating')
   const [showProfile, setShowProfile] = useState(false)
   const [profileName, setProfileName] = useState('')
   const [profileError, setProfileError] = useState('')
@@ -428,6 +429,16 @@ function App() {
   function startPresentation() {
     if (!resultGenerated) return
     setPresentationMode(true); setRevealCount(0); setAnimationTick(0); setDrawing(false)
+  }
+
+  function exportPdf() {
+    if (presentationMode && !printOnly) { window.print(); return }
+    setRevealCount(presentationItemCount); setAnimationTick(0); setDrawing(false); setPrintOnly(true); setPresentationMode(true)
+    window.setTimeout(() => {
+      const finish = () => { setPrintOnly(false); setPresentationMode(false); window.removeEventListener('afterprint', finish) }
+      window.addEventListener('afterprint', finish)
+      window.print()
+    }, 150)
   }
 
   function beginDraw() {
@@ -791,10 +802,12 @@ function App() {
     event.preventDefault()
     if (!supabase) return
     setSavingProfile(true); setProfileError('')
-    const result = await supabase.rpc('update_my_display_name', { new_name: profileName })
+    const normalizedName = profileName.trim()
+    if (normalizedName.length < 2) { setSavingProfile(false); setProfileError('Nimi peab olema vähemalt kaks tähemärki pikk.'); return }
+    const result = await supabase.from('profiles').update({ display_name: normalizedName }).eq('id', session?.user.id || '').select('display_name').single()
     setSavingProfile(false)
-    if (result.error) { setProfileError('Nime salvestamine ei õnnestunud. Käivita esmalt Supabase’i viimistluse SQL.'); return }
-    setProfile((current) => current ? { ...current, display_name: String(result.data) } : current)
+    if (result.error || !result.data) { setProfileError('Nime salvestamine ei õnnestunud. Proovi uuesti.'); return }
+    setProfile((current) => current ? { ...current, display_name: result.data.display_name } : current)
     setShowProfile(false)
   }
 
@@ -881,6 +894,8 @@ function App() {
 
       {showHelp && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHelp(false)}><section className="modal help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title"><div className="modal-header"><div><span className="eyebrow">Lühijuhend</span><h2 id="help-title">Kuidas rakendust kasutada?</h2></div><button className="icon-button" onClick={() => setShowHelp(false)}>×</button></div><div className="help-tabs" role="tablist"><button className={helpSection === 'seating' ? 'active' : ''} onClick={() => setHelpSection('seating')}>🪑 Istekohtade loosimine</button><button className={helpSection === 'groups' ? 'active' : ''} onClick={() => setHelpSection('groups')}>👥 Rühmade loosimine</button></div>{helpSection === 'seating' ? <ol className="help-steps"><li><b>Vali klass ja „Istumiskohad“.</b><span>Ava vajalik klass ning vali töövormiks istekohtade loosimine.</span></li><li><b>Märgi puudujad ja üksinda istujad.</b><span>Puudujad jäetakse loosist välja. Mitmekohaliste laudade puhul saad märkida ka õpilased, kes soovivad üksi istuda.</span></li><li><b>Seadista klassiruum.</b><span>Vali üksikud, paaris- või hübriidlauad ning määra read ja veerud. Hübriidpaigutuses saad iga laua eraldi ühe-, kahe- või kolmekohaliseks muuta; üleliigsed lauad saab eemaldada.</span></li><li><b>Vali loosimise viis.</b><span>Juhuslik loos paigutab kõik õpilased. Juhitud loosis saad nimed paika lohistada, vajalikud kohad lukustada ja ülejäänud uuesti loosida.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Määra õpilased, kes ei tohi istuda koos ega lähestikku – samas lauas, kõrval, ees või taga.</span></li><li><b>Salvesta, esitle või ekspordi.</b><span>Pane plaanile nimi ja salvesta. Klassivaates saad loosimist näidata ning valmis plaani PDF-ina eksportida.</span></li></ol> : <ol className="help-steps"><li><b>Vali klass ja „Rühmatöö“.</b><span>Rühmade loosimine ei sõltu klassiruumi laudade arvust ega paigutusest.</span></li><li><b>Märgi puudujad.</b><span>Kasuta nime leidmiseks otsingut. Puudujad jäetakse rühmade loosist välja.</span></li><li><b>Määra rühma suurus ja loosimise viis.</b><span>Juhuslik loos loob valmis rühmad. Juhitud loosis saad pärast õpilaste nimesid rühmade vahel lohistada.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Vali üheks nimistuks õpilased, kes ei tohi omavahel samasse rühma sattuda. Võid lisada mitu eraldi nimistut.</span></li><li><b>Loosi ja kohanda rühmi.</b><span>Vajuta „Loosi rühmad“. Juhitud režiimis lohista vajaduse korral nimesid ümber; piirangut rikkuvat tõstmist ei lubata.</span></li><li><b>Salvesta rühmad.</b><span>Pane jaotusele nimi ja salvesta see, et sama rühmade jaotust hiljem uuesti kasutada.</span></li><li><b>Kontrolli järgmisel korral puudujaid.</b><span>Tagasitulev õpilane lisatakse kõige väiksemasse sobivasse rühma. Ülejäänud rühmi ümber ei loosita.</span></li></ol>}<div className="modal-actions"><button className="button" onClick={() => setShowHelp(false)}>Selge</button></div></section></div>}
 
+      {showHelp && <div className="modal-backdrop help-backdrop--current" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHelp(false)}><section className="modal help-modal help-modal--current" role="dialog" aria-modal="true" aria-labelledby="current-help-title"><div className="modal-header"><div><span className="eyebrow">Täielik juhend</span><h2 id="current-help-title">Kuidas rakendust kasutada?</h2></div><button className="icon-button" onClick={() => setShowHelp(false)}>×</button></div><div className="help-tabs help-tabs--three" role="tablist"><button className={helpSection === 'seating' ? 'active' : ''} onClick={() => setHelpSection('seating')}>🪑 Istekohad</button><button className={helpSection === 'groups' ? 'active' : ''} onClick={() => setHelpSection('groups')}>👥 Rühmatöö</button><button className={helpSection === 'teaching-groups' ? 'active' : ''} onClick={() => setHelpSection('teaching-groups')}>📚 Õpperühmad</button></div>{helpSection === 'seating' && <ol className="help-steps"><li><b>Vali klass või õpperühm.</b><span>Ava vajalik nimekiri ja vali töövormiks „Istumiskohad“.</span></li><li><b>Märgi puudujad ja üksinda istujad.</b><span>Puudujad jäetakse loosist välja. Mitmekohaliste laudade puhul saad märkida õpilased, kes peavad üksi istuma.</span></li><li><b>Seadista klassiruum.</b><span>Vali üksikud, paaris- või hübriidlauad. Hübriidvaates muuda iga laud eraldi ühe-, kahe- või kolmekohaliseks ning eemalda üleliigsed lauad.</span></li><li><b>Vali juhuslik või juhitud loos.</b><span>Juhitud loosis saad nimesid lohistada, kohti lukustada ja ülejäänud uuesti loosida.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Määra õpilased, kes ei tohi istuda koos ega lähestikku.</span></li><li><b>Salvesta, esitle või ekspordi.</b><span>PDF-i saad eksportida kohe eelvaatest; klassivaadet pole selleks vaja avada. PDF mahutatakse ühele horisontaalsele A4-lehele.</span></li></ol>}{helpSection === 'groups' && <ol className="help-steps"><li><b>Vali klass või õpperühm ja „Rühmatöö“.</b><span>Rühmade loosimine ei sõltu klassiruumi laudade paigutusest.</span></li><li><b>Märgi puudujad ja rühma suurus.</b><span>Puudujad jäetakse loosist välja ning liikmed jagatakse võimalikult tasakaalustatult.</span></li><li><b>Vali juhuslik või juhitud loos.</b><span>Juhitud loosis saad pärast nimesid rühmade vahel lohistada.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Koosta nimistud õpilastest, kes ei tohi samasse rühma sattuda.</span></li><li><b>Loosi ja kohanda.</b><span>Piirangut rikkuvat lohistamist ei lubata. Tagasitulev puuduja lisatakse väikseimasse sobivasse rühma.</span></li><li><b>Salvesta või ekspordi.</b><span>Rühmad saad salvestada, klassivaates esitleda või kohe eelvaatest ühe A4-lehena PDF-i eksportida.</span></li></ol>}{helpSection === 'teaching-groups' && <ol className="help-steps"><li><b>Ava avalehel „Õpperühmad“.</b><span>Õpperühmad on õpetaja enda privaatsed nimekirjad.</span></li><li><b>Vali „Loo õpperühm“.</b><span>Anna rühmale selge nimi, näiteks „8.a ja 8.b inglise keel – I rühm“.</span></li><li><b>Vali üks või mitu klassi.</b><span>Pärast klasside valimist kuvatakse nende õpilased.</span></li><li><b>Vali rühma liikmed.</b><span>Kasuta otsingut ja märgi õpilased, kes päriselt selles tunnirühmas osalevad.</span></li><li><b>Salvesta ja kasuta.</b><span>Õpperühmale saab teha kõik samad isteplaanid, rühmade loosid, erisused ja PDF-id nagu tervele klassile.</span></li><li><b>Muuda vajaduse korral.</b><span>Ava õpperühm ning vali „Muuda rühma“. Sealt saad nime või liikmeid muuta.</span></li></ol>}<div className="modal-actions"><button className="button" onClick={() => setShowHelp(false)}>Selge</button></div></section></div>}
+
       {showArchive && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowArchive(false)}><section className="modal archive-modal" role="dialog" aria-modal="true" aria-labelledby="archive-title"><div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="archive-title">Klasside arhiiv</h2><p>Arhiveerimine peidab klassi töölaudade vaates, kuid säilitab nimekirja ja plaanid.</p></div><button className="icon-button" onClick={() => setShowArchive(false)}>×</button></div>{archivedClasses.length ? <div className="archive-list">{archivedClasses.map((schoolClass) => <div key={schoolClass.id}><span><strong>{schoolClass.name}</strong><small>{schoolClass.academic_year} · {studentCountByClass[schoolClass.id] || 0} õpilast</small></span><button onClick={() => setClassArchived(schoolClass, false)}>Taasta</button><button className="danger-action" onClick={() => permanentlyDeleteClass(schoolClass)}>Kustuta lõplikult</button></div>)}</div> : <div className="mini-empty">Arhiiv on tühi.</div>}</section></div>}
 
       {showUsers && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowUsers(false)}><section className="modal users-modal" role="dialog" aria-modal="true" aria-labelledby="users-title">
@@ -964,12 +979,12 @@ function App() {
               {!planGenerated && <p className="canvas-hint">Eemalda vajaduse korral üleliigsed lauad ja vajuta seejärel „Loo isteplaan“.</p>}
               <div className="class-board"><span>TAHVEL</span></div>
             </div>}
-            {resultGenerated && <div className="plan-finish"><label>Plaani nimi<input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder={`${plannerClass.name} ${activityType === 'groups' ? 'rühmad' : 'isteplaan'}`} /></label><div className="preview-actions"><button className="button button--ghost" onClick={() => { setAssignments([]); setGroups([]); setLockedStudents(new Set()) }}>Alusta uuesti</button>{editingPlanId && <button className="button button--ghost" onClick={saveCurrentAsNewPlan} disabled={savingPlan}>Salvesta uuena</button>}<button className="button button--ghost" onClick={savePlan} disabled={savingPlan}>{savingPlan ? 'Salvestan…' : editingPlanId ? 'Salvesta muudatused' : 'Salvesta plaan'}</button><button className="button" onClick={startPresentation}>Ava klassivaade →</button></div></div>}
+            {resultGenerated && <div className="plan-finish"><label>Plaani nimi<input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder={`${plannerClass.name} ${activityType === 'groups' ? 'rühmad' : 'isteplaan'}`} /></label><div className="preview-actions"><button className="button button--ghost" onClick={() => { setAssignments([]); setGroups([]); setLockedStudents(new Set()) }}>Alusta uuesti</button>{editingPlanId && <button className="button button--ghost" onClick={saveCurrentAsNewPlan} disabled={savingPlan}>Salvesta uuena</button>}<button className="button button--ghost" onClick={savePlan} disabled={savingPlan}>{savingPlan ? 'Salvestan…' : editingPlanId ? 'Salvesta muudatused' : 'Salvesta plaan'}</button><button className="button button--ghost" onClick={exportPdf}>↓ Ekspordi PDF</button><button className="button" onClick={startPresentation}>Ava klassivaade →</button></div></div>}
           </section>
         </main>
       </div>}
 
-      {presentationMode && plannerClass && <div className="presentation-view">
+      {presentationMode && plannerClass && <div className={`presentation-view ${printOnly ? 'presentation-view--print-only' : ''}`}>
         <header><div><img className="presentation-logo" src={logoUrl} alt="Loo Kool" /><span><span className="eyebrow">{activityType === 'groups' ? 'Rühmade loosimine' : 'Kohtade loosimine'}</span><h1>{plannerClass.name}</h1></span></div><button onClick={() => { setPresentationMode(false); setDrawing(false) }}>×</button></header>
         <main className="presentation-room">
           {activityType === 'groups' ? <div className="presentation-groups">{groups.map((group, groupIndex) => <article key={groupIndex}><h2>Rühm {groupIndex + 1}</h2>{group.map((studentId) => { const student = studentById.get(studentId); const memberIndex = groups.flat().indexOf(studentId); const visible = memberIndex < revealCount; const rollingStudent = plannerStudents.length ? plannerStudents[(animationTick + memberIndex * 2) % plannerStudents.length] : null; const shown = visible ? student : drawing ? rollingStudent : null; return <span className={visible ? 'group-member--settled' : ''} key={studentId}>{shown ? `${shown.first_name} ${shown.last_name}` : ' '}</span> })}</article>)}</div> : <><div className="presentation-grid" style={{ gridTemplateColumns: `repeat(${deskColumns}, minmax(130px, 1fr))` }}>
@@ -987,7 +1002,7 @@ function App() {
             </div>)}
           </div><div className="presentation-board">TAHVEL</div></>}
         </main>
-        <footer>{revealCount < presentationItemCount ? <button className="draw-start" onClick={beginDraw} disabled={drawing}>{drawing ? 'LOOSIMINE KÄIB…' : activityType === 'groups' ? '🎲 LOOSI RÜHMAD' : '🎲 LOOSI UUED KOHAD'}</button> : <><span>{activityType === 'groups' ? 'Rühmad on loositud!' : 'Kohad on loositud!'}</span><button className="button button--ghost" onClick={beginDraw}>Loosi uuesti</button><button className="button" onClick={() => window.print()}>↓ Ekspordi PDF</button></>}</footer>
+        <footer>{revealCount < presentationItemCount ? <button className="draw-start" onClick={beginDraw} disabled={drawing}>{drawing ? 'LOOSIMINE KÄIB…' : activityType === 'groups' ? '🎲 LOOSI RÜHMAD' : '🎲 LOOSI UUED KOHAD'}</button> : <><span>{activityType === 'groups' ? 'Rühmad on loositud!' : 'Kohad on loositud!'}</span><button className="button button--ghost" onClick={beginDraw}>Loosi uuesti</button><button className="button" onClick={exportPdf}>↓ Ekspordi PDF</button></>}</footer>
       </div>}
 
       {editingClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setEditingClass(null)}><section className="modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="edit-class-title">

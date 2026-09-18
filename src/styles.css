@@ -170,7 +170,9 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .teaching-student-picker label small { color: #7c8982; font-weight: 800; }
 .teaching-student-picker > p { color: #7c8982; text-align: center; }
 .help-modal { width: min(680px, 100%); }
+.modal-backdrop:has(.help-modal:not(.help-modal--current)) { display: none; }
 .help-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; padding: 5px; border-radius: 13px; background: #edf3ef; }
+.help-tabs--three { grid-template-columns: repeat(3, 1fr); }
 .help-tabs button { padding: 11px 12px; border: 0; border-radius: 9px; background: transparent; color: #52645a; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
 .help-tabs button.active { background: #fff; color: #174a3a; box-shadow: 0 3px 10px rgba(23, 56, 47, .09); }
 .help-steps { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; counter-reset: help; }
@@ -320,6 +322,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .saved-plan-list button.danger-action { background: #f7e6e4; color: #963c34; }
 
 .presentation-view { position: fixed; z-index: 40; inset: 0; display: grid; grid-template-rows: auto 1fr auto; overflow: auto; background: radial-gradient(circle at 50% 20%, #f8fbf8, #e7efe9); }
+.presentation-view--print-only { display: none; }
 .presentation-view > header { display: flex; align-items: center; justify-content: space-between; padding: 20px 4vw 14px; }
 .presentation-view > header > div { display: flex; align-items: center; gap: 20px; }
 .presentation-logo { width: 150px; height: auto; }
