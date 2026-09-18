@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 
 const SCHOOL_DOMAIN = '@lookool.ee'
+const appUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
 
 type Profile = {
   full_name: string | null
@@ -69,7 +70,7 @@ function App() {
     const { error: authError } = await supabase.auth.signInWithOtp({
       email: normalizedEmail,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: appUrl,
         shouldCreateUser: true,
       },
     })
@@ -96,7 +97,7 @@ function App() {
     return (
       <div className="app-shell">
         <header className="topbar">
-          <a className="brand brand--small" href="/" aria-label="Avaleht">
+          <a className="brand brand--small" href={import.meta.env.BASE_URL} aria-label="Avaleht">
             <span className="brand__mark">L</span>
             <span>Loo Kooli isteplaan</span>
           </a>
@@ -129,7 +130,7 @@ function App() {
     <main className="login-page">
       <section className="login-card">
         <div className="login-copy">
-          <a className="brand" href="/">
+          <a className="brand" href={import.meta.env.BASE_URL}>
             <span className="brand__mark">L</span>
             <span>Loo Kooli isteplaan</span>
           </a>
