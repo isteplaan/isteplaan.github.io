@@ -211,9 +211,13 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .absence-picker summary { padding: 11px 12px; font-size: 13px; font-weight: 800; cursor: pointer; }
 .absence-picker summary span { float: right; min-width: 22px; padding: 2px 6px; border-radius: 999px; background: #f6dfdb; color: #923d34; text-align: center; }
 .absence-picker > div { max-height: 210px; overflow: auto; display: grid; gap: 1px; padding: 4px 8px 9px; }
+.absence-picker .picker-search { position: sticky; top: 0; z-index: 1; width: 100%; margin-bottom: 5px; padding: 9px 10px; border: 1px solid #d5e1d8; border-radius: 9px; background: #fff; box-shadow: 0 4px 10px rgba(26, 65, 52, .06); }
 .absence-picker label { display: flex; align-items: center; gap: 8px; padding: 7px; border-radius: 8px; font-size: 12px; cursor: pointer; }
 .absence-picker label:hover { background: #edf3ef; }
 .absence-picker input { width: auto; }
+.absence-picker .picker-search { width: 100%; }
+.picker-empty { padding: 9px 7px; color: #7c8982; }
+.solo-picker { margin-top: 12px; background: #f8f4ea; border-color: #e6dcc5; }
 .control-divider { height: 1px; margin: 24px 0; background: #e5ebe7; }
 .control-help { margin: 7px 0 0; color: #78867e; font-size: 12px; line-height: 1.45; }
 .rule-picker { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-top: 12px; }
