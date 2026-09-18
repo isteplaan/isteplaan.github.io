@@ -5,6 +5,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase'
 const SCHOOL_DOMAIN = '@lookool.ee'
 const appUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
 const logoUrl = `${import.meta.env.BASE_URL}assets/loo-kooli-logo.png`
+const classNameCollator = new Intl.Collator('et', { numeric: true, sensitivity: 'base' })
 
 type Profile = { display_name: string | null; role: 'teacher' | 'admin' }
 type SchoolClass = { id: string; name: string; academic_year: string; archived: boolean }
@@ -212,8 +213,8 @@ function App() {
     return counts
   }, {}), [students])
 
-  const activeClasses = useMemo(() => classes.filter((schoolClass) => !schoolClass.archived), [classes])
-  const archivedClasses = useMemo(() => classes.filter((schoolClass) => schoolClass.archived), [classes])
+  const activeClasses = useMemo(() => classes.filter((schoolClass) => !schoolClass.archived).sort((first, second) => classNameCollator.compare(first.name, second.name)), [classes])
+  const archivedClasses = useMemo(() => classes.filter((schoolClass) => schoolClass.archived).sort((first, second) => classNameCollator.compare(first.name, second.name)), [classes])
 
   const visibleClasses = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('et')
