@@ -139,6 +139,56 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .member-row input { padding: 10px 11px; }
 .member-row button { width: 32px; height: 32px; border: 0; border-radius: 9px; background: #f8e9e7; color: #9a3d35; font-size: 20px; cursor: pointer; }
 
+.planner-page { position: fixed; z-index: 30; inset: 0; overflow: auto; background: #eef3ef; }
+.planner-topbar { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 3vw; border-bottom: 1px solid #dbe5dd; background: #fff; }
+.planner-topbar > div { display: flex; align-items: center; gap: 14px; color: #708078; font-size: 13px; }
+.planner-topbar > strong { font-family: Manrope, sans-serif; }
+.back-button { padding: 9px 12px; border: 0; border-radius: 10px; background: #e8efea; color: #17382f; font-weight: 700; cursor: pointer; }
+.planner-layout { min-height: calc(100vh - 68px); display: grid; grid-template-columns: 370px 1fr; }
+.planner-controls { padding: 28px; border-right: 1px solid #dbe5dd; background: #fff; overflow: auto; }
+.planner-controls h2 { font-size: 22px; }
+.option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
+.option-grid button { display: grid; gap: 4px; padding: 14px 12px; border: 1px solid #d9e4dc; border-radius: 12px; background: #fafcfb; color: #17382f; text-align: left; cursor: pointer; }
+.option-grid button.active { border-color: #3c745f; background: #eaf3ed; box-shadow: inset 0 0 0 1px #3c745f; }
+.option-grid button span { color: #78867e; font-size: 11px; line-height: 1.35; }
+.number-fields { display: grid; grid-template-columns: 1fr 1fr .8fr; gap: 9px; margin-top: 12px; }
+.number-fields label, .number-fields > div { display: grid; gap: 5px; color: #728078; font-size: 11px; font-weight: 700; }
+.number-fields input { padding: 9px 10px; }
+.number-fields > div { place-items: center; padding: 8px; border-radius: 11px; background: #edf3ef; }
+.number-fields strong { color: #27634f; font-size: 20px; }
+.number-fields .capacity-bad { color: #a33b32; }
+.control-divider { height: 1px; margin: 24px 0; background: #e5ebe7; }
+.control-help { margin: 7px 0 0; color: #78867e; font-size: 12px; line-height: 1.45; }
+.rule-picker { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-top: 12px; }
+.rule-picker select { min-width: 0; padding: 9px 7px; border: 1px solid #cad7ce; border-radius: 9px; color: #17382f; background: #fbfcfb; font-size: 11px; }
+.rule-picker button { padding: 0 10px; border: 0; border-radius: 9px; background: #e7eee9; color: #27634f; font-weight: 800; cursor: pointer; }
+.rule-list { display: grid; gap: 6px; margin-top: 10px; }
+.rule-list > div { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 9px; background: #fff1ed; color: #813b31; font-size: 12px; font-weight: 700; }
+.rule-list button { border: 0; background: transparent; color: inherit; font-size: 17px; cursor: pointer; }
+.planner-controls .notice { margin-top: 12px; }
+.draw-button { margin-top: 18px; }
+.planner-preview { min-width: 0; padding: 32px 4vw; }
+.preview-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+.preview-heading h1 { font-size: 34px; }
+.preview-heading p { max-width: 420px; margin: 0; color: #718078; font-size: 12px; text-align: right; }
+.classroom-canvas { min-height: 610px; display: flex; flex-direction: column; padding: 38px 38px 24px; border: 1px solid #dbe5dd; border-radius: 24px; background: #fff; box-shadow: 0 18px 50px rgba(23, 56, 47, .07); }
+.desk-grid { flex: 1; display: grid; align-content: space-evenly; gap: 28px 34px; }
+.desk { min-width: 0; min-height: 76px; display: grid; overflow: hidden; border: 3px solid #b88c4d; border-radius: 10px; background: #d8ad6c; box-shadow: 0 6px 0 #98703a, 0 10px 16px rgba(67, 48, 25, .13); }
+.desk--pair { grid-template-columns: 1fr 1fr; }
+.desk--single { grid-template-columns: 1fr; }
+.seat { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 9px 5px; border-right: 1px dashed rgba(91, 62, 25, .28); color: #2e291f; text-align: center; cursor: grab; }
+.seat:last-child { border-right: 0; }
+.seat > span { min-width: 0; display: grid; font-weight: 800; font-size: 13px; line-height: 1.15; }
+.seat small { overflow: hidden; margin-top: 3px; color: #655137; font-size: 10px; font-weight: 600; text-overflow: ellipsis; }
+.seat button { flex: 0 0 auto; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 8px; background: rgba(255,255,255,.42); cursor: pointer; }
+.seat--locked { background: #efd69f; box-shadow: inset 0 0 0 2px #27634f; }
+.preview-empty { flex: 1; display: grid; place-items: center; align-content: center; color: #718078; text-align: center; }
+.preview-empty > span { color: #c09a50; font-size: 54px; }
+.preview-empty h3 { margin: 14px 0 4px; color: #17382f; font-family: Manrope, sans-serif; }
+.preview-empty p { margin: 0; }
+.class-board { width: min(70%, 650px); height: 42px; display: grid; place-items: center; margin: 42px auto 0; border: 5px solid #714d2d; border-radius: 5px; background: #294f45; color: rgba(255,255,255,.72); box-shadow: 0 5px 0 #4e321c; font-size: 11px; font-weight: 800; letter-spacing: .22em; }
+.preview-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
 @media (max-width: 800px) {
   .login-page { padding: 0; place-items: stretch; }
   .login-card { grid-template-columns: 1fr; border-radius: 0; }
@@ -159,4 +209,9 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .member-row { grid-template-columns: 22px 1fr 1fr 32px; gap: 5px; }
   .modal-backdrop { padding: 12px; }
   .modal { padding: 24px 20px; max-height: calc(100vh - 24px); }
+  .planner-layout { grid-template-columns: 1fr; }
+  .planner-controls { border-right: 0; border-bottom: 1px solid #dbe5dd; }
+  .planner-preview { padding: 24px 16px; }
+  .classroom-canvas { min-height: 520px; padding: 24px 12px 18px; overflow-x: auto; }
+  .desk-grid { min-width: 560px; gap: 22px 18px; }
 }
