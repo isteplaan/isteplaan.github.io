@@ -231,6 +231,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .group-size-field { display: grid; gap: 6px; margin-top: 12px; padding: 13px; border-radius: 12px; background: #edf4ef; }
 .group-size-field label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .group-size-field input { width: 82px; padding: 8px 10px; }
+.group-size-field select { min-width: 190px; padding: 8px 10px; border: 1px solid #cbd9cf; border-radius: 8px; background: #fff; color: #26352e; }
 .group-size-field p { margin: 0; color: #718078; font-size: 11px; }
 .group-mode-picker { margin-top: 10px; }
 .group-rule-picker { margin-top: 10px; }
