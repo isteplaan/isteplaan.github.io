@@ -6,7 +6,7 @@ const SCHOOL_DOMAIN = '@lookool.ee'
 const appUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
 
 type Profile = { display_name: string | null; role: 'teacher' | 'admin' }
-type SchoolClass = { id: string; name: string; academic_year: string }
+type SchoolClass = { id: string; name: string; academic_year: string; archived: boolean }
 type Student = { id: string; class_id: string; first_name: string; last_name: string }
 type EditableStudent = { id?: string; first_name: string; last_name: string }
 type ViewFilter = 'favorites' | 'all'
@@ -131,6 +131,12 @@ function App() {
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
   const [userSearch, setUserSearch] = useState('')
+  const [showArchive, setShowArchive] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [profileName, setProfileName] = useState('')
+  const [profileError, setProfileError] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
   const [adminMode, setAdminMode] = useState<AdminMode>('single')
   const [className, setClassName] = useState('')
   const [academicYear, setAcademicYear] = useState('2026/2027')
@@ -156,7 +162,7 @@ function App() {
       setDataLoading(true); setDashboardError('')
       const [profileResult, classesResult, studentsResult, favoritesResult, plansResult] = await Promise.all([
         supabase.from('profiles').select('display_name, role').eq('id', session.user.id).single(),
-        supabase.from('school_classes').select('id, name, academic_year').eq('archived', false).order('name'),
+        supabase.from('school_classes').select('id, name, academic_year, archived').order('name'),
         supabase.from('students').select('id, class_id, first_name, last_name').eq('active', true).order('last_name'),
         supabase.from('teacher_favorite_classes').select('class_id').eq('teacher_id', session.user.id),
         supabase.from('seating_plans').select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, updated_at').eq('teacher_id', session.user.id).order('updated_at', { ascending: false }),
@@ -181,10 +187,13 @@ function App() {
     return counts
   }, {}), [students])
 
+  const activeClasses = useMemo(() => classes.filter((schoolClass) => !schoolClass.archived), [classes])
+  const archivedClasses = useMemo(() => classes.filter((schoolClass) => schoolClass.archived), [classes])
+
   const visibleClasses = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('et')
-    return classes.filter((schoolClass) => (viewFilter === 'all' || favoriteIds.has(schoolClass.id)) && (!query || schoolClass.name.toLocaleLowerCase('et').includes(query)))
-  }, [classes, favoriteIds, search, viewFilter])
+    return activeClasses.filter((schoolClass) => (viewFilter === 'all' || favoriteIds.has(schoolClass.id)) && (!query || schoolClass.name.toLocaleLowerCase('et').includes(query)))
+  }, [activeClasses, favoriteIds, search, viewFilter])
 
   const filteredAdminUsers = useMemo(() => {
     const query = userSearch.trim().toLocaleLowerCase('et')
@@ -382,7 +391,7 @@ function App() {
     if (!className.trim() || !academicYear.trim()) { setDashboardError('Sisesta klassi nimi ja õppeaasta.'); return }
     if (lineCount > 0 && parsedStudents.length !== lineCount) { setDashboardError('Igal õpilasereal peab olema vähemalt ees- ja perekonnanimi.'); return }
     setSavingClass(true)
-    const classResult = await supabase.from('school_classes').insert({ name: className.trim(), academic_year: academicYear.trim() }).select('id, name, academic_year').single()
+    const classResult = await supabase.from('school_classes').insert({ name: className.trim(), academic_year: academicYear.trim() }).select('id, name, academic_year, archived').single()
     if (classResult.error || !classResult.data) { setSavingClass(false); setDashboardError('Klassi lisamine ei õnnestunud. Kontrolli, kas sama klass on juba olemas.'); return }
     const newClass = classResult.data as SchoolClass
     if (parsedStudents.length) {
@@ -420,7 +429,7 @@ function App() {
       const duplicate = classRecords.find((record) => classes.some((item) => item.name.toLocaleLowerCase('et') === record.name.toLocaleLowerCase('et') && item.academic_year === record.academic_year))
       if (duplicate) throw new Error(`Klass ${duplicate.name} (${duplicate.academic_year}) on juba olemas.`)
 
-      const classesResult = await supabase.from('school_classes').insert(classRecords).select('id, name, academic_year')
+      const classesResult = await supabase.from('school_classes').insert(classRecords).select('id, name, academic_year, archived')
       if (classesResult.error || !classesResult.data) throw new Error('Klasside salvestamine ei õnnestunud.')
       const createdClasses = classesResult.data as SchoolClass[]
       const idMap = new Map(createdClasses.map((item) => [`${item.academic_year}::${item.name.toLocaleLowerCase('et')}`, item.id]))
@@ -499,6 +508,50 @@ function App() {
     setAdminUsers((result.data || []) as AdminUser[])
   }
 
+  async function saveProfileName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase) return
+    setSavingProfile(true); setProfileError('')
+    const result = await supabase.rpc('update_my_display_name', { new_name: profileName })
+    setSavingProfile(false)
+    if (result.error) { setProfileError('Nime salvestamine ei õnnestunud. Käivita esmalt Supabase’i viimistluse SQL.'); return }
+    setProfile((current) => current ? { ...current, display_name: String(result.data) } : current)
+    setShowProfile(false)
+  }
+
+  async function setClassArchived(schoolClass: SchoolClass, archived: boolean) {
+    if (!supabase || profile?.role !== 'admin') return
+    if (archived && !window.confirm(`Kas arhiveerida klass „${schoolClass.name}“? Õpilased ja plaanid säilivad.`)) return
+    const result = await supabase.from('school_classes').update({ archived }).eq('id', schoolClass.id)
+    if (result.error) { setDashboardError('Klassi arhiivioleku muutmine ei õnnestunud.'); return }
+    setClasses((current) => current.map((item) => item.id === schoolClass.id ? { ...item, archived } : item))
+    setSelectedClass(null); setDashboardNotice(archived ? `Klass ${schoolClass.name} on arhiveeritud.` : `Klass ${schoolClass.name} on taastatud.`)
+  }
+
+  async function permanentlyDeleteClass(schoolClass: SchoolClass) {
+    if (!supabase || profile?.role !== 'admin') return
+    const confirmation = window.prompt(`Klassi, õpilaste ja kõigi seotud plaanide lõplikuks kustutamiseks kirjuta: ${schoolClass.name}`)
+    if (confirmation !== schoolClass.name) return
+    const result = await supabase.from('school_classes').delete().eq('id', schoolClass.id)
+    if (result.error) { setDashboardError('Klassi kustutamine ei õnnestunud.'); return }
+    setClasses((current) => current.filter((item) => item.id !== schoolClass.id)); setStudents((current) => current.filter((student) => student.class_id !== schoolClass.id)); setSavedPlans((current) => current.filter((plan) => plan.class_id !== schoolClass.id))
+    setDashboardNotice(`Klass ${schoolClass.name} on lõplikult kustutatud.`)
+  }
+
+  async function saveCurrentAsNewPlan() {
+    if (!supabase || !session || !plannerClass || !planGenerated) return
+    setSavingPlan(true); setPlannerError('')
+    const result = await supabase.from('seating_plans').insert({
+      teacher_id: session.user.id, class_id: plannerClass.id, name: `${planName.trim() || plannerClass.name} (koopia)`, rows: deskRows, cols: deskColumns,
+      seat_type: deskType, mode: drawMode,
+      seats: assignments.map((studentId, index) => ({ student_id: studentId, disabled: disabledDesks.has(Math.floor(index / seatsPerDesk)) })), avoid_pairs: separationRules,
+    }).select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, updated_at').single()
+    setSavingPlan(false)
+    if (result.error || !result.data) { setPlannerError('Uue plaani salvestamine ei õnnestunud.'); return }
+    const saved = result.data as SeatingPlan
+    setEditingPlanId(saved.id); setPlanName(saved.name); setSavedPlans((current) => [saved, ...current]); setDashboardNotice(`Uus isteplaan „${saved.name}“ on salvestatud.`)
+  }
+
   if (loading) return <main className="center-page"><div className="loader" aria-label="Laen" /></main>
 
   if (session) {
@@ -506,7 +559,7 @@ function App() {
     return <div className="app-shell">
       <header className="topbar">
         <a className="brand brand--small" href={import.meta.env.BASE_URL} aria-label="Avaleht"><span className="brand__mark">L</span><span>Loo Kooli isteplaan</span></a>
-        <div className="account"><span>{displayName}</span>{profile?.role === 'admin' && <span className="badge">Admin</span>}<button className="button button--ghost button--compact" onClick={signOut}>Logi välja</button></div>
+        <div className="account"><button className="account-name" onClick={() => { setProfileName(profile?.display_name || displayName); setProfileError(''); setShowProfile(true) }}>{displayName}</button>{profile?.role === 'admin' && <span className="badge">Admin</span>}<button className="button button--ghost button--compact" onClick={() => setShowHelp(true)}>Juhend</button><button className="button button--ghost button--compact" onClick={signOut}>Logi välja</button></div>
       </header>
       <main className="dashboard">
         <section className="welcome-card">
@@ -520,8 +573,9 @@ function App() {
             <div className="class-tools">
               <div className="segmented" aria-label="Klasside filter">
                 <button className={viewFilter === 'favorites' ? 'active' : ''} onClick={() => setViewFilter('favorites')}>★ Minu klassid <span>{favoriteIds.size}</span></button>
-                <button className={viewFilter === 'all' ? 'active' : ''} onClick={() => setViewFilter('all')}>Kõik <span>{classes.length}</span></button>
+                <button className={viewFilter === 'all' ? 'active' : ''} onClick={() => setViewFilter('all')}>Kõik <span>{activeClasses.length}</span></button>
               </div>
+              {profile?.role === 'admin' && <button className="archive-button" onClick={() => setShowArchive(true)}>Arhiiv ({archivedClasses.length})</button>}
               <input className="search-input" type="search" placeholder="Otsi klassi…" value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
           </div>
@@ -542,6 +596,12 @@ function App() {
         </section>
       </main>
 
+      {showProfile && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowProfile(false)}><section className="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title"><div className="modal-header"><div><span className="eyebrow">Minu konto</span><h2 id="profile-title">Kuvatav nimi</h2><p>Seda nime näed rakenduse ülaservas.</p></div><button className="icon-button" onClick={() => setShowProfile(false)}>×</button></div><form onSubmit={saveProfileName}><div className="field"><label htmlFor="profile-name">Nimi</label><input id="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} minLength={2} maxLength={100} required /></div>{profileError && <div className="notice notice--error">{profileError}</div>}<div className="modal-actions"><button type="button" className="button button--ghost" onClick={() => setShowProfile(false)}>Loobu</button><button className="button" disabled={savingProfile}>{savingProfile ? 'Salvestan…' : 'Salvesta nimi'}</button></div></form></section></div>}
+
+      {showHelp && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHelp(false)}><section className="modal help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title"><div className="modal-header"><div><span className="eyebrow">Lühijuhend</span><h2 id="help-title">Kuidas isteplaani teha?</h2></div><button className="icon-button" onClick={() => setShowHelp(false)}>×</button></div><ol className="help-steps"><li><b>Vali klass.</b><span>Märgi sagedamini kasutatavad klassid tärniga.</span></li><li><b>Seadista ruum.</b><span>Vali paaris- või üksiklauad, ridade ja veergude arv ning eemalda üleliigsed lauad.</span></li><li><b>Lisa piirangud.</b><span>Määra õpilased, kes ei tohi istuda samas lauas ega kõrval, ees või taga.</span></li><li><b>Loosi või juhi.</b><span>Juhitud loosimisel lohista nimed paika, lukusta vajalikud kohad ja loosi ülejäänud.</span></li><li><b>Salvesta ja esitle.</b><span>Pane plaanile nimi, salvesta see ning ava õpilastele animatsiooniga klassivaade.</span></li><li><b>Prindi.</b><span>Pärast loosimist vali „Ekspordi PDF“ ja seejärel printimisaknas „Salvesta PDF-ina“.</span></li></ol><div className="modal-actions"><button className="button" onClick={() => setShowHelp(false)}>Selge</button></div></section></div>}
+
+      {showArchive && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowArchive(false)}><section className="modal archive-modal" role="dialog" aria-modal="true" aria-labelledby="archive-title"><div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="archive-title">Klasside arhiiv</h2><p>Arhiveerimine peidab klassi töölaudade vaates, kuid säilitab nimekirja ja plaanid.</p></div><button className="icon-button" onClick={() => setShowArchive(false)}>×</button></div>{archivedClasses.length ? <div className="archive-list">{archivedClasses.map((schoolClass) => <div key={schoolClass.id}><span><strong>{schoolClass.name}</strong><small>{schoolClass.academic_year} · {studentCountByClass[schoolClass.id] || 0} õpilast</small></span><button onClick={() => setClassArchived(schoolClass, false)}>Taasta</button><button className="danger-action" onClick={() => permanentlyDeleteClass(schoolClass)}>Kustuta lõplikult</button></div>)}</div> : <div className="mini-empty">Arhiiv on tühi.</div>}</section></div>}
+
       {showUsers && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowUsers(false)}><section className="modal users-modal" role="dialog" aria-modal="true" aria-labelledby="users-title">
         <div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="users-title">Kasutajad</h2><p>Õpetajate kontod ja rakenduse kasutuse koondvaade.</p></div><button className="icon-button" onClick={() => setShowUsers(false)} aria-label="Sulge">×</button></div>
         {!usersLoading && !usersError && <div className="user-stats"><div><strong>{adminUsers.length}</strong><span>kasutajat</span></div><div><strong>{adminUsers.filter((user) => user.last_seen_at).length}</strong><span>rakendust kasutanud</span></div><div><strong>{adminUsers.reduce((sum, user) => sum + Number(user.plan_count), 0)}</strong><span>salvestatud plaani</span></div></div>}
@@ -560,7 +620,7 @@ function App() {
         <div className="modal-header"><div><span className="eyebrow">{selectedClass.academic_year}</span><h2 id="roster-title">{selectedClass.name}</h2><p>{selectedStudents.length} õpilast</p></div><button className="icon-button" onClick={() => setSelectedClass(null)} aria-label="Sulge">×</button></div>
         {selectedStudents.length ? <ol className="student-list">{selectedStudents.map((student) => <li key={student.id}><span>{student.first_name} {student.last_name}</span></li>)}</ol> : <div className="mini-empty">Selles klassis pole veel õpilasi.</div>}
         {savedPlans.some((plan) => plan.class_id === selectedClass.id) && <div className="saved-plan-list"><strong>Minu salvestatud plaanid</strong>{savedPlans.filter((plan) => plan.class_id === selectedClass.id).map((plan) => <div key={plan.id}><span><b>{plan.name}</b><small>Muudetud {new Date(plan.updated_at).toLocaleDateString('et-EE')}</small></span><button onClick={() => openSavedPlan(plan)}>Muuda</button><button onClick={() => openSavedPlan(plan, true)}>Klassivaade</button><button onClick={() => copyPlan(plan)}>Kopeeri</button><button className="danger-action" onClick={() => deletePlan(plan)}>Kustuta</button></div>)}</div>}
-        <div className="modal-actions">{profile?.role === 'admin' && <button className="button button--ghost button--edit" onClick={() => openClassEditor(selectedClass)}>Muuda klassi</button>}<button className="button button--ghost" onClick={() => setSelectedClass(null)}>Sulge</button><button className="button" onClick={() => openPlanner(selectedClass)}>Koosta isteplaan →</button></div>
+        <div className="modal-actions">{profile?.role === 'admin' && <><button className="button button--ghost button--edit" onClick={() => openClassEditor(selectedClass)}>Muuda klassi</button><button className="button button--danger-ghost" onClick={() => setClassArchived(selectedClass, true)}>Arhiveeri</button></>}<button className="button button--ghost" onClick={() => setSelectedClass(null)}>Sulge</button><button className="button" onClick={() => openPlanner(selectedClass)}>Koosta isteplaan →</button></div>
       </section></div>}
 
       {plannerClass && <div className="planner-page">
@@ -605,7 +665,7 @@ function App() {
               {!planGenerated && <p className="canvas-hint">Eemalda vajaduse korral üleliigsed lauad ja vajuta seejärel „Loo isteplaan“.</p>}
               <div className="class-board"><span>TAHVEL</span></div>
             </div>
-            {planGenerated && <div className="plan-finish"><label>Isteplaani nimi<input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder={`${plannerClass.name} isteplaan`} /></label><div className="preview-actions"><button className="button button--ghost" onClick={() => { setAssignments([]); setLockedStudents(new Set()) }}>Alusta uuesti</button><button className="button button--ghost" onClick={savePlan} disabled={savingPlan}>{savingPlan ? 'Salvestan…' : editingPlanId ? 'Salvesta muudatused' : 'Salvesta plaan'}</button><button className="button" onClick={startPresentation}>Ava klassivaade →</button></div></div>}
+            {planGenerated && <div className="plan-finish"><label>Isteplaani nimi<input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder={`${plannerClass.name} isteplaan`} /></label><div className="preview-actions"><button className="button button--ghost" onClick={() => { setAssignments([]); setLockedStudents(new Set()) }}>Alusta uuesti</button>{editingPlanId && <button className="button button--ghost" onClick={saveCurrentAsNewPlan} disabled={savingPlan}>Salvesta uuena</button>}<button className="button button--ghost" onClick={savePlan} disabled={savingPlan}>{savingPlan ? 'Salvestan…' : editingPlanId ? 'Salvesta muudatused' : 'Salvesta plaan'}</button><button className="button" onClick={startPresentation}>Ava klassivaade →</button></div></div>}
           </section>
         </main>
       </div>}
