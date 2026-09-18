@@ -330,22 +330,31 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .draw-start { min-width: 290px; padding: 17px 28px; border: 0; border-radius: 15px; background: #27634f; color: #fff; box-shadow: 0 8px 22px rgba(39,99,79,.24); font-family: Manrope, sans-serif; font-size: 17px; font-weight: 800; cursor: pointer; }
 .draw-start:disabled { opacity: .75; cursor: wait; }
 
-@page { size: A4 landscape; margin: 9mm; }
+@page { size: A4 landscape; margin: 7mm; }
 @media print {
-  body { background: #fff !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  body > * { visibility: hidden !important; }
-  .presentation-view, .presentation-view * { visibility: visible !important; }
-  .presentation-view { position: absolute; inset: 0; width: 100%; min-height: 100%; display: flex; flex-direction: column; overflow: visible; background: #fff; }
-  .presentation-view > header { padding: 0 0 5mm; }
-  .presentation-logo { width: 38mm; }
-  .presentation-view > header h1 { font-size: 24pt; }
+  html, body, #root { width: 100% !important; height: 100% !important; max-height: 100% !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #fff !important; }
+  body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  #root > :not(.app-shell) { display: none !important; }
+  .app-shell { width: 100% !important; height: 100% !important; min-height: 0 !important; overflow: hidden !important; }
+  .app-shell > :not(.presentation-view) { display: none !important; }
+  .presentation-view { position: fixed !important; inset: 0 !important; width: auto !important; height: 100% !important; min-height: 0 !important; display: grid !important; grid-template-rows: auto minmax(0, 1fr) !important; overflow: hidden !important; background: #fff !important; break-after: avoid-page; page-break-after: avoid; }
+  .presentation-view > header { min-height: 0; padding: 0 0 3mm; }
+  .presentation-view > header > div { gap: 5mm; }
+  .presentation-logo { width: 31mm; }
+  .presentation-view > header h1 { font-size: 20pt; }
+  .presentation-view > header .eyebrow { font-size: 7pt; }
   .presentation-view > header button, .presentation-view > footer { display: none !important; }
-  .presentation-room { min-width: 0; flex: 1; padding: 0; }
-  .presentation-grid { gap: 7mm 10mm; }
-  .presentation-desk { min-height: 17mm; break-inside: avoid; box-shadow: 0 2mm 0 #8c642f; }
-  .presentation-seat strong { font-size: 12pt; }
-  .presentation-seat span { font-size: 8pt; }
-  .presentation-board { height: 10mm; margin-top: 8mm; box-shadow: 0 1.5mm 0 #432b18; }
+  .presentation-room { min-width: 0 !important; min-height: 0 !important; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; padding: 0; overflow: hidden; }
+  .presentation-grid { min-height: 0; align-content: stretch; grid-auto-rows: minmax(0, 1fr); gap: 3mm 5mm; overflow: hidden; }
+  .presentation-desk { min-height: 0; height: auto; border-width: 1mm; border-radius: 2mm; break-inside: avoid; box-shadow: 0 1.2mm 0 #8c642f; overflow: hidden; }
+  .presentation-seat { min-height: 0; padding: 1.5mm; }
+  .presentation-seat strong { font-size: 10pt; line-height: 1.05; }
+  .presentation-seat span { font-size: 7pt; line-height: 1.05; }
+  .presentation-board { width: 66%; height: 8mm; margin-top: 4mm; border-width: 1.2mm; box-shadow: 0 1mm 0 #432b18; font-size: 7pt; }
+  .presentation-groups { min-height: 0; align-content: stretch; grid-template-columns: repeat(auto-fit, minmax(43mm, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 3mm; overflow: hidden; }
+  .presentation-groups article { min-height: 0; border-width: .5mm; border-radius: 2mm; box-shadow: none; break-inside: avoid; overflow: hidden; }
+  .presentation-groups h2 { padding: 2mm 3mm; font-size: 11pt; }
+  .presentation-groups span { min-height: 0; padding: 1.5mm 3mm; font-size: 8pt; line-height: 1.1; }
 }
 
 @media (max-width: 800px) {
