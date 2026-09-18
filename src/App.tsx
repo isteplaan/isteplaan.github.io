@@ -59,6 +59,19 @@ function makeGroupSizes(studentCount: number, targetSize: number) {
   return [...Array(fullGroups).fill(targetSize), remainder]
 }
 
+function groupsViolateRules(groups: string[][], rules: SeparationRule[]) {
+  return rules.some((rule) => groups.some((group) => group.includes(rule.firstId) && group.includes(rule.secondId)))
+}
+
+function addToSmallestAllowedGroup(groups: string[][], studentId: string, rules: SeparationRule[]) {
+  const next = groups.map((group) => [...group])
+  const forbiddenIds = new Set(rules.flatMap((rule) => rule.firstId === studentId ? [rule.secondId] : rule.secondId === studentId ? [rule.firstId] : []))
+  const target = next.filter((group) => !group.some((id) => forbiddenIds.has(id))).sort((first, second) => first.length - second.length)[0]
+  if (target) target.push(studentId)
+  else next.push([studentId])
+  return next
+}
+
 function parseStudentNames(value: string) {
   return value.split('\n').map((line) => line.trim().replace(/^[-•]\s*/, '')).filter(Boolean).map((fullName) => {
     const parts = fullName.split(/\s+/)
@@ -302,11 +315,9 @@ function App() {
         return result
       }, []).filter(Boolean)
       const assigned = new Set(savedGroups.flat())
-      presentIds.filter((id) => !assigned.has(id)).forEach((id) => {
-        if (!savedGroups.length) savedGroups.push([id])
-        else savedGroups.reduce((smallest, group) => group.length < smallest.length ? group : smallest, savedGroups[0]).push(id)
-      })
-      setGroups(savedGroups)
+      let restoredGroups = savedGroups
+      presentIds.filter((id) => !assigned.has(id)).forEach((id) => { restoredGroups = addToSmallestAllowedGroup(restoredGroups, id, plan.avoid_pairs || []) })
+      setGroups(restoredGroups)
       setSoloStudentIds(new Set())
     } else setGroups([])
     setDisabledDesks(new Set(plan.seats.flatMap((seat, index) => seat.disabled ? [Math.floor(index / seatMultiplier)] : [])))
@@ -369,8 +380,16 @@ function App() {
     if (activityType === 'groups') {
       const shuffledIds = shuffle(presentStudents.map((student) => student.id))
       const sizes = makeGroupSizes(shuffledIds.length, groupSize)
-      let offset = 0
-      setGroups(sizes.map((size) => { const group = shuffledIds.slice(offset, offset + size); offset += size; return group }))
+      let candidateGroups: string[][] = []
+      let found = false
+      for (let attempt = 0; attempt < 2500; attempt += 1) {
+        const candidateIds = attempt ? shuffle(shuffledIds) : shuffledIds
+        let offset = 0
+        candidateGroups = sizes.map((size) => { const group = candidateIds.slice(offset, offset + size); offset += size; return group })
+        if (!groupsViolateRules(candidateGroups, separationRules)) { found = true; break }
+      }
+      if (!found) { setPlannerError('Nende piirangutega ei leidnud sobivat rühmade jaotust. Vähenda piiranguid või muuda rühma suurust.'); return }
+      setGroups(candidateGroups)
       setPlannerError(''); return
     }
     if (seatCount < presentStudents.length) { setPlannerError(`Kohti on ${seatCount}, aga kohal on ${presentStudents.length} õpilast. Lisa laudu.`); return }
@@ -433,10 +452,7 @@ function App() {
     if (activityType === 'groups' && groups.length) {
       setGroups((current) => {
         if (!isCurrentlyAbsent) return current.map((group) => group.filter((id) => id !== studentId)).filter((group) => group.length)
-        const next = current.map((group) => [...group])
-        if (!next.length) return [[studentId]]
-        next.reduce((smallest, group) => group.length < smallest.length ? group : smallest, next[0]).push(studentId)
-        return next
+        return addToSmallestAllowedGroup(current, studentId, separationRules)
       })
     } else { setAssignments([]); setGroups([]); setLockedStudents(new Set()) }
   }
@@ -445,7 +461,7 @@ function App() {
     if (!ruleFirst || !ruleSecond || ruleFirst === ruleSecond) { setPlannerError('Vali kaks erinevat õpilast.'); return }
     if (separationRules.some((rule) => [rule.firstId, rule.secondId].includes(ruleFirst) && [rule.firstId, rule.secondId].includes(ruleSecond))) { setPlannerError('See piirang on juba lisatud.'); return }
     setSeparationRules((current) => [...current, { firstId: ruleFirst, secondId: ruleSecond }])
-    setRuleFirst(''); setRuleSecond(''); setPlannerError('')
+    setRuleFirst(''); setRuleSecond(''); setAssignments([]); setGroups([]); setLockedStudents(new Set()); setPlannerError('')
   }
 
   function moveStudent(fromIndex: number, toIndex: number) {
@@ -718,7 +734,7 @@ function App() {
 
       {showProfile && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowProfile(false)}><section className="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title"><div className="modal-header"><div><span className="eyebrow">Minu konto</span><h2 id="profile-title">Kuvatav nimi</h2><p>Seda nime näed rakenduse ülaservas.</p></div><button className="icon-button" onClick={() => setShowProfile(false)}>×</button></div><form onSubmit={saveProfileName}><div className="field"><label htmlFor="profile-name">Nimi</label><input id="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} minLength={2} maxLength={100} required /></div>{profileError && <div className="notice notice--error">{profileError}</div>}<div className="modal-actions"><button type="button" className="button button--ghost" onClick={() => setShowProfile(false)}>Loobu</button><button className="button" disabled={savingProfile}>{savingProfile ? 'Salvestan…' : 'Salvesta nimi'}</button></div></form></section></div>}
 
-      {showHelp && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHelp(false)}><section className="modal help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title"><div className="modal-header"><div><span className="eyebrow">Lühijuhend</span><h2 id="help-title">Kuidas rakendust kasutada?</h2></div><button className="icon-button" onClick={() => setShowHelp(false)}>×</button></div><div className="help-tabs" role="tablist"><button className={helpSection === 'seating' ? 'active' : ''} onClick={() => setHelpSection('seating')}>🪑 Istekohtade loosimine</button><button className={helpSection === 'groups' ? 'active' : ''} onClick={() => setHelpSection('groups')}>👥 Rühmade loosimine</button></div>{helpSection === 'seating' ? <ol className="help-steps"><li><b>Vali klass ja „Istumiskohad“.</b><span>Ava vajalik klass ning vali töövormiks istekohtade loosimine.</span></li><li><b>Märgi puudujad ja üksinda istujad.</b><span>Puudujad jäetakse loosist välja. Paarislaudade puhul saad märkida ka õpilased, kes soovivad üksi istuda.</span></li><li><b>Seadista klassiruum.</b><span>Vali paaris- või üksiklauad, ridade ja veergude arv ning eemalda eelvaates üleliigsed lauad.</span></li><li><b>Vali loosimise viis.</b><span>Juhuslik loos paigutab kõik õpilased. Juhitud loosis saad nimed paika lohistada, vajalikud kohad lukustada ja ülejäänud uuesti loosida.</span></li><li><b>Lisa piirangud.</b><span>Määra õpilased, kes ei tohi istuda samas lauas ega kõrval, ees või taga.</span></li><li><b>Salvesta, esitle või ekspordi.</b><span>Pane plaanile nimi ja salvesta. Klassivaates saad loosimist näidata ning valmis plaani PDF-ina eksportida.</span></li></ol> : <ol className="help-steps"><li><b>Vali klass ja „Rühmatöö“.</b><span>Rühmade loosimine ei sõltu klassiruumi laudade arvust ega paigutusest.</span></li><li><b>Märgi puudujad.</b><span>Kasuta nime leidmiseks otsingut. Puudujad jäetakse rühmade loosist välja.</span></li><li><b>Määra rühma suurus.</b><span>Sisesta soovitud liikmete arv. Süsteem jagab õpilased võimalikult tasakaalustatult ega jäta kedagi üheliikmelisse rühma.</span></li><li><b>Loosi rühmad.</b><span>Vajuta „Loosi rühmad“. Vajaduse korral saad kõik rühmad uuesti loosida.</span></li><li><b>Salvesta rühmad.</b><span>Pane jaotusele nimi ja salvesta see, et sama rühmade jaotust hiljem uuesti kasutada.</span></li><li><b>Kontrolli järgmisel korral puudujaid.</b><span>Tagasitulev õpilane lisatakse kõige väiksemasse rühma. Ülejäänud rühmi ümber ei loosita.</span></li></ol>}<div className="modal-actions"><button className="button" onClick={() => setShowHelp(false)}>Selge</button></div></section></div>}
+      {showHelp && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHelp(false)}><section className="modal help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title"><div className="modal-header"><div><span className="eyebrow">Lühijuhend</span><h2 id="help-title">Kuidas rakendust kasutada?</h2></div><button className="icon-button" onClick={() => setShowHelp(false)}>×</button></div><div className="help-tabs" role="tablist"><button className={helpSection === 'seating' ? 'active' : ''} onClick={() => setHelpSection('seating')}>🪑 Istekohtade loosimine</button><button className={helpSection === 'groups' ? 'active' : ''} onClick={() => setHelpSection('groups')}>👥 Rühmade loosimine</button></div>{helpSection === 'seating' ? <ol className="help-steps"><li><b>Vali klass ja „Istumiskohad“.</b><span>Ava vajalik klass ning vali töövormiks istekohtade loosimine.</span></li><li><b>Märgi puudujad ja üksinda istujad.</b><span>Puudujad jäetakse loosist välja. Paarislaudade puhul saad märkida ka õpilased, kes soovivad üksi istuda.</span></li><li><b>Seadista klassiruum.</b><span>Vali paaris- või üksiklauad, ridade ja veergude arv ning eemalda eelvaates üleliigsed lauad.</span></li><li><b>Vali loosimise viis.</b><span>Juhuslik loos paigutab kõik õpilased. Juhitud loosis saad nimed paika lohistada, vajalikud kohad lukustada ja ülejäänud uuesti loosida.</span></li><li><b>Lisa piirangud.</b><span>Määra õpilased, kes ei tohi istuda samas lauas ega kõrval, ees või taga.</span></li><li><b>Salvesta, esitle või ekspordi.</b><span>Pane plaanile nimi ja salvesta. Klassivaates saad loosimist näidata ning valmis plaani PDF-ina eksportida.</span></li></ol> : <ol className="help-steps"><li><b>Vali klass ja „Rühmatöö“.</b><span>Rühmade loosimine ei sõltu klassiruumi laudade arvust ega paigutusest.</span></li><li><b>Märgi puudujad.</b><span>Kasuta nime leidmiseks otsingut. Puudujad jäetakse rühmade loosist välja.</span></li><li><b>Määra rühma suurus.</b><span>Sisesta soovitud liikmete arv. Süsteem jagab õpilased võimalikult tasakaalustatult ega jäta kedagi üheliikmelisse rühma.</span></li><li><b>Lisa juhitud piirangud.</b><span>Märgi paarid, kes ei tohi sattuda samasse rühma. Lisatud piirangud kuvatakse loeteluna.</span></li><li><b>Loosi rühmad.</b><span>Vajuta „Loosi rühmad“. Vajaduse korral saad kõik rühmad uuesti loosida.</span></li><li><b>Salvesta rühmad.</b><span>Pane jaotusele nimi ja salvesta see, et sama rühmade jaotust hiljem uuesti kasutada.</span></li><li><b>Kontrolli järgmisel korral puudujaid.</b><span>Tagasitulev õpilane lisatakse kõige väiksemasse rühma. Ülejäänud rühmi ümber ei loosita.</span></li></ol>}<div className="modal-actions"><button className="button" onClick={() => setShowHelp(false)}>Selge</button></div></section></div>}
 
       {showArchive && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowArchive(false)}><section className="modal archive-modal" role="dialog" aria-modal="true" aria-labelledby="archive-title"><div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="archive-title">Klasside arhiiv</h2><p>Arhiveerimine peidab klassi töölaudade vaates, kuid säilitab nimekirja ja plaanid.</p></div><button className="icon-button" onClick={() => setShowArchive(false)}>×</button></div>{archivedClasses.length ? <div className="archive-list">{archivedClasses.map((schoolClass) => <div key={schoolClass.id}><span><strong>{schoolClass.name}</strong><small>{schoolClass.academic_year} · {studentCountByClass[schoolClass.id] || 0} õpilast</small></span><button onClick={() => setClassArchived(schoolClass, false)}>Taasta</button><button className="danger-action" onClick={() => permanentlyDeleteClass(schoolClass)}>Kustuta lõplikult</button></div>)}</div> : <div className="mini-empty">Arhiiv on tühi.</div>}</section></div>}
 
@@ -770,6 +786,7 @@ function App() {
             <div className="rule-picker"><select value={ruleFirst} onChange={(event) => setRuleFirst(event.target.value)}><option value="">Vali esimene…</option>{plannerStudents.map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><select value={ruleSecond} onChange={(event) => setRuleSecond(event.target.value)}><option value="">Vali teine…</option>{plannerStudents.filter((student) => student.id !== ruleFirst).map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><button type="button" onClick={addSeparationRule}>+ Lisa</button></div>
             {separationRules.length > 0 && <div className="rule-list">{separationRules.map((rule, index) => <div key={`${rule.firstId}-${rule.secondId}`}><span>{studentById.get(rule.firstId)?.first_name} ↔ {studentById.get(rule.secondId)?.first_name}</span><button onClick={() => setSeparationRules((current) => current.filter((_, ruleIndex) => ruleIndex !== index))}>×</button></div>)}</div>}
             </>}
+            {activityType === 'groups' && <><div className="control-divider" /><div><span className="eyebrow">Juhitud loosimine</span><h2>Ei tohi samas rühmas olla</h2><p className="control-help">Lisa paarid, keda ei paigutata rühmade loosimisel kokku.</p></div><div className="rule-picker"><select value={ruleFirst} onChange={(event) => setRuleFirst(event.target.value)}><option value="">Vali esimene…</option>{plannerStudents.filter((student) => !absentStudentIds.has(student.id)).map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><select value={ruleSecond} onChange={(event) => setRuleSecond(event.target.value)}><option value="">Vali teine…</option>{plannerStudents.filter((student) => !absentStudentIds.has(student.id) && student.id !== ruleFirst).map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><button type="button" onClick={addSeparationRule}>+ Lisa</button></div>{separationRules.length > 0 && <div className="rule-list">{separationRules.map((rule, index) => <div key={`${rule.firstId}-${rule.secondId}`}><span>{studentById.get(rule.firstId)?.first_name} ↔ {studentById.get(rule.secondId)?.first_name}</span><button onClick={() => { setSeparationRules((current) => current.filter((_, ruleIndex) => ruleIndex !== index)); setGroups([]); setPlannerError('') }}>×</button></div>)}</div>}</>}
             {plannerError && <div className="notice notice--error" role="alert">{plannerError}</div>}
             <button className="button button--wide draw-button" onClick={() => generatePlan(activityType === 'seating' && drawMode === 'guided' && planGenerated)}>{resultGenerated ? activityType === 'groups' ? '🎲 Loosi rühmad uuesti' : drawMode === 'guided' ? '🎲 Loosi lukustamata kohad' : '🎲 Loosi uuesti' : activityType === 'groups' ? '🎲 Loosi rühmad' : '🎲 Loo isteplaan'}</button>
           </aside>
