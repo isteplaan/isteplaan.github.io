@@ -4,6 +4,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase'
 
 const SCHOOL_DOMAIN = '@lookool.ee'
 const appUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
+const logoUrl = `${import.meta.env.BASE_URL}assets/loo-kooli-logo.png`
 
 type Profile = { display_name: string | null; role: 'teacher' | 'admin' }
 type SchoolClass = { id: string; name: string; academic_year: string; archived: boolean }
@@ -613,7 +614,7 @@ function App() {
     const displayName = profile?.display_name || session.user.email?.split('@')[0] || 'õpetaja'
     return <div className="app-shell">
       <header className="topbar">
-        <a className="brand brand--small" href={import.meta.env.BASE_URL} aria-label="Avaleht"><span className="brand__mark">L</span><span>Loo Kooli isteplaan</span></a>
+        <a className="brand brand--small" href={import.meta.env.BASE_URL} aria-label="Avaleht"><img className="school-logo" src={logoUrl} alt="Loo Kool" /><span className="brand-divider" /><span>Istumisplaan</span></a>
         <div className="account"><button className="account-name" onClick={() => { setProfileName(profile?.display_name || displayName); setProfileError(''); setShowProfile(true) }}>{displayName}</button>{profile?.role === 'admin' && <span className="badge">Admin</span>}<button className="button button--ghost button--compact" onClick={() => setShowHelp(true)}>Juhend</button><button className="button button--ghost button--compact" onClick={signOut}>Logi välja</button></div>
       </header>
       <main className="dashboard">
@@ -735,7 +736,7 @@ function App() {
       </div>}
 
       {presentationMode && plannerClass && <div className="presentation-view">
-        <header><div><span className="eyebrow">Kohtade loosimine</span><h1>{plannerClass.name}</h1></div><button onClick={() => { setPresentationMode(false); setDrawing(false) }}>×</button></header>
+        <header><div><img className="presentation-logo" src={logoUrl} alt="Loo Kool" /><span><span className="eyebrow">{activityType === 'groups' ? 'Rühmade loosimine' : 'Kohtade loosimine'}</span><h1>{plannerClass.name}</h1></span></div><button onClick={() => { setPresentationMode(false); setDrawing(false) }}>×</button></header>
         <main className="presentation-room">
           {activityType === 'groups' ? <div className="presentation-groups">{groups.map((group, groupIndex) => <article key={groupIndex}><h2>Rühm {groupIndex + 1}</h2>{group.map((studentId) => { const student = studentById.get(studentId); const memberIndex = groups.flat().indexOf(studentId); const visible = memberIndex < revealCount; const rollingStudent = plannerStudents.length ? plannerStudents[(animationTick + memberIndex * 2) % plannerStudents.length] : null; const shown = visible ? student : drawing ? rollingStudent : null; return <span className={visible ? 'group-member--settled' : ''} key={studentId}>{shown ? `${shown.first_name} ${shown.last_name}` : ' '}</span> })}</article>)}</div> : <><div className="presentation-grid" style={{ gridTemplateColumns: `repeat(${deskColumns}, minmax(130px, 1fr))` }}>
             {Array.from({ length: totalDeskCount }, (_, deskIndex) => disabledDesks.has(deskIndex) ? <div key={deskIndex} /> : <div className={`presentation-desk presentation-desk--${deskType}`} key={deskIndex}>
@@ -778,7 +779,7 @@ function App() {
   }
 
   return <main className="login-page"><section className="login-card">
-    <div className="login-copy"><a className="brand" href={import.meta.env.BASE_URL}><span className="brand__mark">L</span><span>Loo Kooli isteplaan</span></a><span className="eyebrow">Õpetajate töövahend</span><h1>Paiguta klass rahulikult paika.</h1><p>Koosta juhitud või juhuslik isteplaan, määra sobimatud naabrid ning salvesta plaan järgmiseks korraks.</p><div className="feature-list"><span>✓ Klassid ja nimekirjad ühes kohas</span><span>✓ Õpetaja enda privaatsed plaanid</span><span>✓ Esitlusvaade ja PDF-eksport</span></div></div>
+    <div className="login-copy"><a className="brand brand--login" href={import.meta.env.BASE_URL}><span className="login-logo-card"><img className="school-logo" src={logoUrl} alt="Loo Kool" /></span><span>Istumisplaan</span></a><span className="eyebrow">Õpetajate töövahend</span><h1>Paiguta klass rahulikult paika.</h1><p>Koosta juhitud või juhuslik isteplaan, määra sobimatud naabrid ning salvesta plaan järgmiseks korraks.</p><div className="feature-list"><span>✓ Klassid ja nimekirjad ühes kohas</span><span>✓ Õpetaja enda privaatsed plaanid</span><span>✓ Esitlusvaade ja PDF-eksport</span></div></div>
     <div className="login-form-wrap"><div className="login-form-header"><span className="icon-mail">✉</span><h2>Logi sisse</h2><p>Saadame sulle e-postiga ühekordse sisselogimislingi.</p></div>
       {!isSupabaseConfigured && <div className="notice notice--warning">Rakendus ootab veel Supabase’i publishable key seadistamist.</div>}
       <form onSubmit={sendMagicLink}><label htmlFor="email">Kooli e-post</label><input id="email" name="email" type="email" autoComplete="email" placeholder="eesnimi.perenimi@lookool.ee" value={email} onChange={(event) => setEmail(event.target.value)} required />{error && <div className="notice notice--error" role="alert">{error}</div>}{message && <div className="notice notice--success" role="status">{message}</div>}<button className="button button--wide" type="submit" disabled={submitting || !isSupabaseConfigured}>{submitting ? 'Saadan…' : 'Saada sisselogimislink'}</button></form>
