@@ -210,6 +210,15 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .group-size-field label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .group-size-field input { width: 82px; padding: 8px 10px; }
 .group-size-field p { margin: 0; color: #718078; font-size: 11px; }
+.group-mode-picker { margin-top: 10px; }
+.group-rule-picker { margin-top: 10px; }
+.group-rule-add { margin-top: 8px; }
+.group-rule-list { display: grid; gap: 7px; margin-top: 10px; }
+.group-rule-list article { display: flex; align-items: flex-start; gap: 8px; padding: 10px 11px; border: 1px solid #dce6df; border-radius: 10px; background: #f7faf8; }
+.group-rule-list article > div { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.group-rule-list strong { color: #27634f; font-size: 12px; }
+.group-rule-list span { color: #66766d; font-size: 11px; line-height: 1.4; }
+.group-rule-list button { width: 25px; height: 25px; border: 0; border-radius: 7px; background: #f6e3e0; color: #963c34; font-size: 17px; cursor: pointer; }
 .absence-picker { margin-top: 12px; border: 1px solid #dce6df; border-radius: 11px; background: #fafcfb; }
 .absence-picker summary { padding: 11px 12px; font-size: 13px; font-weight: 800; cursor: pointer; }
 .absence-picker summary span { float: right; min-width: 22px; padding: 2px 6px; border-radius: 999px; background: #f6dfdb; color: #923d34; text-align: center; }
@@ -263,6 +272,12 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .groups-grid article { overflow: hidden; border: 1px solid #dbe6de; border-radius: 14px; background: #f8faf8; }
 .groups-grid article > strong { display: block; padding: 11px 13px; background: #27634f; color: #fff; font-family: Manrope, sans-serif; }
 .groups-grid article > span { display: block; padding: 9px 13px; border-bottom: 1px solid #e4ebe6; font-weight: 600; }
+.group-drag-hint { margin: -8px 0 14px; color: #6e7d75; font-size: 12px; }
+.groups-grid--guided article { transition: border-color .18s, box-shadow .18s; }
+.groups-grid--guided article:hover { border-color: #a7beae; box-shadow: 0 8px 20px rgba(23,56,47,.08); }
+.groups-grid--guided article > span { display: flex; align-items: center; gap: 7px; cursor: grab; user-select: none; }
+.groups-grid--guided article > span:active { cursor: grabbing; opacity: .65; }
+.groups-grid--guided article > span b { color: #8aa095; font-size: 15px; }
 .absence-modal { width: min(560px, 100%); }
 .previous-absences { display: grid; gap: 7px; }
 .previous-absences label { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; padding: 11px; border-radius: 11px; background: #f2f6f3; cursor: pointer; }
