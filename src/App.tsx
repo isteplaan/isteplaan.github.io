@@ -16,6 +16,7 @@ type DrawMode = 'random' | 'guided'
 type SeparationRule = { firstId: string; secondId: string }
 type StoredSeat = { student_id: string | null; disabled?: boolean }
 type SeatingPlan = { id: string; class_id: string; name: string; rows: number; cols: number; seat_type: DeskType; mode: DrawMode; seats: StoredSeat[]; avoid_pairs: SeparationRule[]; updated_at: string }
+type AdminUser = { user_id: string; email: string; display_name: string | null; role: 'teacher' | 'admin'; active: boolean; joined_at: string; last_seen_at: string | null; favorite_classes: string[]; saved_classes: string[]; plan_count: number }
 
 function shuffle<T>(items: T[]) {
   const result = [...items]
@@ -125,6 +126,11 @@ function App() {
   const [drawing, setDrawing] = useState(false)
   const [revealCount, setRevealCount] = useState(0)
   const [animationTick, setAnimationTick] = useState(0)
+  const [showUsers, setShowUsers] = useState(false)
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [usersError, setUsersError] = useState('')
+  const [userSearch, setUserSearch] = useState('')
   const [adminMode, setAdminMode] = useState<AdminMode>('single')
   const [className, setClassName] = useState('')
   const [academicYear, setAcademicYear] = useState('2026/2027')
@@ -166,6 +172,10 @@ function App() {
     loadDashboard()
   }, [session])
 
+  useEffect(() => {
+    if (supabase && session?.user.id) supabase.rpc('touch_last_seen').then(() => undefined)
+  }, [session?.user.id])
+
   const studentCountByClass = useMemo(() => students.reduce<Record<string, number>>((counts, student) => {
     counts[student.class_id] = (counts[student.class_id] || 0) + 1
     return counts
@@ -175,6 +185,11 @@ function App() {
     const query = search.trim().toLocaleLowerCase('et')
     return classes.filter((schoolClass) => (viewFilter === 'all' || favoriteIds.has(schoolClass.id)) && (!query || schoolClass.name.toLocaleLowerCase('et').includes(query)))
   }, [classes, favoriteIds, search, viewFilter])
+
+  const filteredAdminUsers = useMemo(() => {
+    const query = userSearch.trim().toLocaleLowerCase('et')
+    return adminUsers.filter((user) => !query || `${user.display_name || ''} ${user.email}`.toLocaleLowerCase('et').includes(query))
+  }, [adminUsers, userSearch])
 
   const selectedStudents = useMemo(() => selectedClass ? students.filter((student) => student.class_id === selectedClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et')) : [], [selectedClass, students])
 
@@ -475,6 +490,15 @@ function App() {
 
   async function signOut() { await supabase?.auth.signOut() }
 
+  async function openUsersView() {
+    if (!supabase || profile?.role !== 'admin') return
+    setShowUsers(true); setUsersLoading(true); setUsersError('')
+    const result = await supabase.rpc('admin_user_overview')
+    setUsersLoading(false)
+    if (result.error) { setUsersError('Kasutajate vaadet ei õnnestunud laadida. Käivita esmalt Supabase’i SQL-muudatus.'); return }
+    setAdminUsers((result.data || []) as AdminUser[])
+  }
+
   if (loading) return <main className="center-page"><div className="loader" aria-label="Laen" /></main>
 
   if (session) {
@@ -487,7 +511,7 @@ function App() {
       <main className="dashboard">
         <section className="welcome-card">
           <div><span className="eyebrow">Klasside töölaud</span><h1>Vali klass ja loo uus isteplaan.</h1><p>Märgi sagedamini kasutatavad klassid tärniga. Õpilaste nimekirjad on nähtavad ainult sisselogitud koolitöötajatele.</p></div>
-          {profile?.role === 'admin' && <button className="button button--gold" onClick={() => setShowAdminForm(true)}>+ Lisa klass</button>}
+          {profile?.role === 'admin' && <div className="admin-shortcuts"><button className="button button--ghost" onClick={openUsersView}>Kasutajad</button><button className="button button--gold" onClick={() => setShowAdminForm(true)}>+ Lisa klass</button></div>}
         </section>
         {(dashboardError || dashboardNotice) && <div className={`notice dashboard-notice ${dashboardError ? 'notice--error' : 'notice--success'}`} role="status">{dashboardError || dashboardNotice}</div>}
         <section className="class-section">
@@ -517,6 +541,20 @@ function App() {
           </div>}
         </section>
       </main>
+
+      {showUsers && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowUsers(false)}><section className="modal users-modal" role="dialog" aria-modal="true" aria-labelledby="users-title">
+        <div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="users-title">Kasutajad</h2><p>Õpetajate kontod ja rakenduse kasutuse koondvaade.</p></div><button className="icon-button" onClick={() => setShowUsers(false)} aria-label="Sulge">×</button></div>
+        {!usersLoading && !usersError && <div className="user-stats"><div><strong>{adminUsers.length}</strong><span>kasutajat</span></div><div><strong>{adminUsers.filter((user) => user.last_seen_at).length}</strong><span>rakendust kasutanud</span></div><div><strong>{adminUsers.reduce((sum, user) => sum + Number(user.plan_count), 0)}</strong><span>salvestatud plaani</span></div></div>}
+        <input className="user-search" type="search" placeholder="Otsi nime või e-posti järgi…" value={userSearch} onChange={(event) => setUserSearch(event.target.value)} />
+        {usersLoading ? <div className="data-state"><div className="loader" /><p>Laen kasutajaid…</p></div> : usersError ? <div className="notice notice--error">{usersError}</div> : <div className="users-table">
+          {filteredAdminUsers.map((user) => <article key={user.user_id} className={!user.active ? 'user-card user-card--inactive' : 'user-card'}>
+            <div className="user-identity"><span>{(user.display_name || user.email).slice(0, 1).toUpperCase()}</span><div><strong>{user.display_name || user.email.split('@')[0]}</strong><small>{user.email}</small></div>{user.role === 'admin' && <b>Admin</b>}</div>
+            <div className="user-activity"><span><small>Liitus</small>{new Date(user.joined_at).toLocaleDateString('et-EE')}</span><span><small>Viimati kasutas</small>{user.last_seen_at ? new Date(user.last_seen_at).toLocaleString('et-EE', { dateStyle: 'short', timeStyle: 'short' }) : 'Pole veel kasutanud'}</span><span><small>Plaane</small>{user.plan_count}</span></div>
+            <div className="user-classes"><div><small>Tärniga klassid</small>{user.favorite_classes.length ? user.favorite_classes.map((name) => <span key={name}>★ {name}</span>) : <em>Puuduvad</em>}</div><div><small>Plaanid klassidele</small>{user.saved_classes.length ? user.saved_classes.map((name) => <span key={name}>{name}</span>) : <em>Puuduvad</em>}</div></div>
+          </article>)}
+          {!filteredAdminUsers.length && <div className="mini-empty">Sobivaid kasutajaid ei leitud.</div>}
+        </div>}
+      </section></div>}
 
       {selectedClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedClass(null)}><section className="modal roster-modal" role="dialog" aria-modal="true" aria-labelledby="roster-title">
         <div className="modal-header"><div><span className="eyebrow">{selectedClass.academic_year}</span><h2 id="roster-title">{selectedClass.name}</h2><p>{selectedStudents.length} õpilast</p></div><button className="icon-button" onClick={() => setSelectedClass(null)} aria-label="Sulge">×</button></div>
