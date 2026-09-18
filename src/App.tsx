@@ -49,17 +49,26 @@ function violatesSeparation(assignments: (string | null)[], rules: SeparationRul
   })
 }
 
-function makeGroupSizes(studentCount: number, targetSize: number) {
+function makeGroupSizes(studentCount: number, targetSize: number, minimumSize: number, preferLargerGroups: boolean) {
   if (!studentCount) return []
-  if (studentCount <= targetSize) return [studentCount]
+  if (studentCount <= targetSize) return studentCount >= minimumSize ? [studentCount] : []
+  if (preferLargerGroups) {
+    const groupCount = Math.max(1, Math.floor(studentCount / targetSize))
+    const sizes = Array(groupCount).fill(targetSize)
+    for (let extra = groupCount * targetSize; extra < studentCount; extra += 1) sizes[extra % groupCount] += 1
+    return sizes
+  }
   const fullGroups = Math.floor(studentCount / targetSize)
   const remainder = studentCount % targetSize
   if (!remainder) return Array(fullGroups).fill(targetSize)
-  if (remainder === 1 && fullGroups > 0) {
-    if (targetSize === 2) return [...Array(Math.max(0, fullGroups - 1)).fill(2), 3]
-    return [...Array(Math.max(0, fullGroups - 1)).fill(targetSize), targetSize - 1, 2]
+  const sizes = [...Array(fullGroups).fill(targetSize), remainder]
+  while (sizes.at(-1)! < minimumSize) {
+    const donorIndex = sizes.slice(0, -1).findIndex((size) => size > minimumSize)
+    if (donorIndex < 0) return makeGroupSizes(studentCount, targetSize, minimumSize, true)
+    sizes[donorIndex] -= 1
+    sizes[sizes.length - 1] += 1
   }
-  return [...Array(fullGroups).fill(targetSize), remainder]
+  return sizes
 }
 
 function groupsViolateRules(groups: string[][], rules: SeparationRule[]) {
@@ -159,6 +168,8 @@ function App() {
   const [drawMode, setDrawMode] = useState<DrawMode>('guided')
   const [activityType, setActivityType] = useState<ActivityType>('seating')
   const [groupSize, setGroupSize] = useState(4)
+  const [groupMinimumSize, setGroupMinimumSize] = useState(2)
+  const [preferLargerGroups, setPreferLargerGroups] = useState(true)
   const [groups, setGroups] = useState<string[][]>([])
   const [groupRuleSelection, setGroupRuleSelection] = useState<Set<string>>(new Set())
   const [groupRuleSearch, setGroupRuleSearch] = useState('')
@@ -449,7 +460,9 @@ function App() {
     const presentStudents = plannerStudents.filter((student) => !absentStudentIds.has(student.id))
     if (activityType === 'groups') {
       const shuffledIds = shuffle(presentStudents.map((student) => student.id))
-      const sizes = makeGroupSizes(shuffledIds.length, groupSize)
+      if (presentStudents.length < groupMinimumSize) { setPlannerError(`Kohal on ${presentStudents.length} õpilast, kuid rühma miinimum on ${groupMinimumSize}. Vähenda minimaalset rühma suurust.`); return }
+      const sizes = makeGroupSizes(shuffledIds.length, groupSize, groupMinimumSize, preferLargerGroups)
+      if (!sizes.length) { setPlannerError('Nende seadetega ei saa rühmi moodustada. Muuda soovitud või minimaalset rühma suurust.'); return }
       let candidateGroups: string[][] = []
       let found = false
       for (let attempt = 0; attempt < 2500; attempt += 1) {
@@ -931,7 +944,7 @@ function App() {
           <aside className="planner-controls">
             <div><span className="eyebrow">Töövorm</span><h2>Mida loosime?</h2></div>
             <div className="option-grid"><button className={activityType === 'seating' ? 'active' : ''} onClick={() => { setActivityType('seating'); setGroups([]) }}><strong>🪑 Istumiskohad</strong><span>Paiguta õpilased klassiruumi</span></button><button className={activityType === 'groups' ? 'active' : ''} onClick={() => { setActivityType('groups'); setAssignments([]); setLockedStudents(new Set()) }}><strong>👥 Rühmatöö</strong><span>Loosi tasakaalustatud rühmad</span></button></div>
-            {activityType === 'groups' && <><div className="group-size-field"><label>Soovitud liikmeid rühmas<input type="number" min="2" max="12" value={groupSize} onChange={(event) => { setGroupSize(Math.max(2, Number(event.target.value))); setGroups([]) }} /></label><p>Süsteem väldib üheliikmelist rühma ja näitab tegeliku jaotuse.</p></div><div className="option-grid group-mode-picker"><button className={drawMode === 'random' ? 'active' : ''} onClick={() => setDrawMode('random')}><strong>🎲 Juhuslik</strong><span>Loosi valmis rühmad</span></button><button className={drawMode === 'guided' ? 'active' : ''} onClick={() => setDrawMode('guided')}><strong>🎯 Juhitud</strong><span>Lohista pärast nimesid</span></button></div></>}
+            {activityType === 'groups' && <><div className="group-size-field"><label>Kui suured rühmad?<input type="number" min="2" max="12" value={groupSize} onChange={(event) => { const next = Math.max(2, Number(event.target.value)); setGroupSize(next); setGroupMinimumSize((current) => Math.min(current, next)); setGroups([]) }} /></label><label>Mitte vähem kui<input type="number" min="2" max={groupSize} value={groupMinimumSize} onChange={(event) => { setGroupMinimumSize(Math.min(groupSize, Math.max(2, Number(event.target.value)))); setGroups([]) }} /></label><label>Kui täpselt ei jagu<select value={preferLargerGroups ? 'larger' : 'smaller'} onChange={(event) => { setPreferLargerGroups(event.target.value === 'larger'); setGroups([]) }}><option value="larger">Tee mõni rühm suurem</option><option value="smaller">Luba väiksemat rühma</option></select></label><p>Näiteks 7 õpilast, soovitud suurus 3 ja miinimum 3 annab jaotuse 4 + 3.</p></div><div className="option-grid group-mode-picker"><button className={drawMode === 'random' ? 'active' : ''} onClick={() => setDrawMode('random')}><strong>🎲 Juhuslik</strong><span>Loosi valmis rühmad</span></button><button className={drawMode === 'guided' ? 'active' : ''} onClick={() => setDrawMode('guided')}><strong>🎯 Juhitud</strong><span>Lohista pärast nimesid</span></button></div></>}
             <details className="absence-picker"><summary>Puudujad <span>{absentStudentIds.size}</span></summary><div><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={absenceSearch} onChange={(event) => setAbsenceSearch(event.target.value)} />{filteredAbsenceStudents.map((student) => <label key={student.id}><input type="checkbox" checked={absentStudentIds.has(student.id)} onChange={() => toggleAbsent(student.id)} /><span>{student.first_name} {student.last_name}</span></label>)}{!filteredAbsenceStudents.length && <small className="picker-empty">Õpilast ei leitud.</small>}</div></details>
             {activityType === 'seating' && <><div className="control-divider" />
             <div><span className="eyebrow">1. Klassiruum</span><h2>Lauad ja kohad</h2></div>
