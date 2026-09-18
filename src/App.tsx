@@ -8,6 +8,7 @@ const appUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toStrin
 type Profile = { display_name: string | null; role: 'teacher' | 'admin' }
 type SchoolClass = { id: string; name: string; academic_year: string }
 type Student = { id: string; class_id: string; first_name: string; last_name: string }
+type EditableStudent = { id?: string; first_name: string; last_name: string }
 type ViewFilter = 'favorites' | 'all'
 type AdminMode = 'single' | 'import'
 
@@ -67,6 +68,12 @@ function App() {
   const [search, setSearch] = useState('')
   const [selectedClass, setSelectedClass] = useState<SchoolClass | null>(null)
   const [showAdminForm, setShowAdminForm] = useState(false)
+  const [editingClass, setEditingClass] = useState<SchoolClass | null>(null)
+  const [editClassName, setEditClassName] = useState('')
+  const [editAcademicYear, setEditAcademicYear] = useState('')
+  const [editMembers, setEditMembers] = useState<EditableStudent[]>([])
+  const [editError, setEditError] = useState('')
+  const [savingEdits, setSavingEdits] = useState(false)
   const [adminMode, setAdminMode] = useState<AdminMode>('single')
   const [className, setClassName] = useState('')
   const [academicYear, setAcademicYear] = useState('2026/2027')
@@ -210,6 +217,55 @@ function App() {
     }
   }
 
+  function openClassEditor(schoolClass: SchoolClass) {
+    const members = students.filter((student) => student.class_id === schoolClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et'))
+    setEditClassName(schoolClass.name)
+    setEditAcademicYear(schoolClass.academic_year)
+    setEditMembers(members.map(({ id, first_name, last_name }) => ({ id, first_name, last_name })))
+    setEditError('')
+    setSelectedClass(null)
+    setEditingClass(schoolClass)
+  }
+
+  function updateMember(index: number, field: 'first_name' | 'last_name', value: string) {
+    setEditMembers((current) => current.map((member, memberIndex) => memberIndex === index ? { ...member, [field]: value } : member))
+  }
+
+  async function saveClassEdits(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase || profile?.role !== 'admin' || !editingClass) return
+    const client = supabase
+    setEditError('')
+    if (!editClassName.trim() || !editAcademicYear.trim()) { setEditError('Klassi nimi ja õppeaasta on kohustuslikud.'); return }
+    if (editMembers.some((member) => !member.first_name.trim() || !member.last_name.trim())) { setEditError('Igal õpilasel peab olema ees- ja perekonnanimi.'); return }
+    setSavingEdits(true)
+
+    const classResult = await client.from('school_classes').update({ name: editClassName.trim(), academic_year: editAcademicYear.trim() }).eq('id', editingClass.id)
+    if (classResult.error) { setSavingEdits(false); setEditError('Klassi nime muutmine ei õnnestunud. Kontrolli, kas sama nimi on juba kasutusel.'); return }
+
+    const originalIds = students.filter((student) => student.class_id === editingClass.id).map((student) => student.id)
+    const retainedIds = new Set(editMembers.flatMap((member) => member.id ? [member.id] : []))
+    const removedIds = originalIds.filter((id) => !retainedIds.has(id))
+    const existingMembers = editMembers.filter((member): member is EditableStudent & { id: string } => Boolean(member.id))
+    const newMembers = editMembers.filter((member) => !member.id)
+
+    const memberOperations = await Promise.all([
+      ...existingMembers.map((member) => client.from('students').update({ first_name: member.first_name.trim(), last_name: member.last_name.trim() }).eq('id', member.id).select('id, class_id, first_name, last_name').single()),
+      ...(newMembers.length ? [client.from('students').insert(newMembers.map((member) => ({ class_id: editingClass.id, first_name: member.first_name.trim(), last_name: member.last_name.trim() }))).select('id, class_id, first_name, last_name')] : []),
+      ...(removedIds.length ? [client.from('students').delete().in('id', removedIds)] : []),
+    ])
+
+    if (memberOperations.some((operation) => operation.error)) {
+      setSavingEdits(false); setEditError('Kõiki õpilaste muudatusi ei õnnestunud salvestada. Värskenda lehte ja kontrolli nimekirja.'); return
+    }
+
+    const refreshedStudents = await client.from('students').select('id, class_id, first_name, last_name').eq('class_id', editingClass.id).eq('active', true).order('last_name')
+    const updatedClass = { ...editingClass, name: editClassName.trim(), academic_year: editAcademicYear.trim() }
+    setClasses((current) => current.map((item) => item.id === editingClass.id ? updatedClass : item).sort((a, b) => a.name.localeCompare(b.name, 'et')))
+    setStudents((current) => [...current.filter((student) => student.class_id !== editingClass.id), ...((refreshedStudents.data || []) as Student[])])
+    setSavingEdits(false); setEditingClass(null); setDashboardNotice(`Klassi ${updatedClass.name} muudatused on salvestatud.`)
+  }
+
   async function signOut() { await supabase?.auth.signOut() }
 
   if (loading) return <main className="center-page"><div className="loader" aria-label="Laen" /></main>
@@ -258,7 +314,18 @@ function App() {
       {selectedClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedClass(null)}><section className="modal roster-modal" role="dialog" aria-modal="true" aria-labelledby="roster-title">
         <div className="modal-header"><div><span className="eyebrow">{selectedClass.academic_year}</span><h2 id="roster-title">{selectedClass.name}</h2><p>{selectedStudents.length} õpilast</p></div><button className="icon-button" onClick={() => setSelectedClass(null)} aria-label="Sulge">×</button></div>
         {selectedStudents.length ? <ol className="student-list">{selectedStudents.map((student) => <li key={student.id}><span>{student.first_name} {student.last_name}</span></li>)}</ol> : <div className="mini-empty">Selles klassis pole veel õpilasi.</div>}
-        <div className="modal-actions"><button className="button button--ghost" onClick={() => setSelectedClass(null)}>Sulge</button><button className="button" disabled>Koosta isteplaan →</button></div><p className="coming-soon">Isteplaani koostamine lisandub järgmises etapis.</p>
+        <div className="modal-actions">{profile?.role === 'admin' && <button className="button button--ghost button--edit" onClick={() => openClassEditor(selectedClass)}>Muuda klassi</button>}<button className="button button--ghost" onClick={() => setSelectedClass(null)}>Sulge</button><button className="button" disabled>Koosta isteplaan →</button></div><p className="coming-soon">Isteplaani koostamine lisandub järgmises etapis.</p>
+      </section></div>}
+
+      {editingClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setEditingClass(null)}><section className="modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="edit-class-title">
+        <div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="edit-class-title">Muuda klassi</h2><p>Paranda klassi andmeid ja õpilaste nimekirja.</p></div><button className="icon-button" onClick={() => setEditingClass(null)} aria-label="Sulge">×</button></div>
+        <form onSubmit={saveClassEdits}>
+          <div className="field-row"><div className="field"><label htmlFor="edit-class-name">Klassi nimi</label><input id="edit-class-name" value={editClassName} onChange={(event) => setEditClassName(event.target.value)} required /></div><div className="field"><label htmlFor="edit-academic-year">Õppeaasta</label><input id="edit-academic-year" value={editAcademicYear} onChange={(event) => setEditAcademicYear(event.target.value)} required /></div></div>
+          <div className="member-editor-header"><div><strong>Õpilased</strong><span>{editMembers.length} nimekirjas</span></div><button className="template-button" type="button" onClick={() => setEditMembers((current) => [...current, { first_name: '', last_name: '' }])}>+ Lisa õpilane</button></div>
+          <div className="member-editor">{editMembers.map((member, index) => <div className="member-row" key={member.id || `new-${index}`}><span>{index + 1}</span><input aria-label={`Õpilase ${index + 1} eesnimi`} value={member.first_name} onChange={(event) => updateMember(index, 'first_name', event.target.value)} placeholder="Eesnimi" required /><input aria-label={`Õpilase ${index + 1} perekonnanimi`} value={member.last_name} onChange={(event) => updateMember(index, 'last_name', event.target.value)} placeholder="Perekonnanimi" required /><button type="button" onClick={() => setEditMembers((current) => current.filter((_, memberIndex) => memberIndex !== index))} aria-label={`Eemalda ${member.first_name} ${member.last_name}`}>×</button></div>)}</div>
+          {editError && <div className="notice notice--error" role="alert">{editError}</div>}
+          <div className="modal-actions"><button className="button button--ghost" type="button" onClick={() => setEditingClass(null)}>Loobu</button><button className="button" type="submit" disabled={savingEdits}>{savingEdits ? 'Salvestan…' : 'Salvesta muudatused'}</button></div>
+        </form>
       </section></div>}
 
       {showAdminForm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowAdminForm(false)}><section className="modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-title">
