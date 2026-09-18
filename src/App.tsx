@@ -11,6 +11,34 @@ type Student = { id: string; class_id: string; first_name: string; last_name: st
 type EditableStudent = { id?: string; first_name: string; last_name: string }
 type ViewFilter = 'favorites' | 'all'
 type AdminMode = 'single' | 'import'
+type DeskType = 'single' | 'pair'
+type DrawMode = 'random' | 'guided'
+type SeparationRule = { firstId: string; secondId: string }
+
+function shuffle<T>(items: T[]) {
+  const result = [...items]
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(Math.random() * (index + 1))
+    ;[result[index], result[other]] = [result[other], result[index]]
+  }
+  return result
+}
+
+function deskPosition(seatIndex: number, columns: number, seatsPerDesk: number) {
+  const deskIndex = Math.floor(seatIndex / seatsPerDesk)
+  return { row: Math.floor(deskIndex / columns), column: deskIndex % columns }
+}
+
+function violatesSeparation(assignments: (string | null)[], rules: SeparationRule[], columns: number, seatsPerDesk: number) {
+  return rules.some((rule) => {
+    const firstIndex = assignments.indexOf(rule.firstId)
+    const secondIndex = assignments.indexOf(rule.secondId)
+    if (firstIndex < 0 || secondIndex < 0) return false
+    const first = deskPosition(firstIndex, columns, seatsPerDesk)
+    const second = deskPosition(secondIndex, columns, seatsPerDesk)
+    return Math.abs(first.row - second.row) + Math.abs(first.column - second.column) <= 1
+  })
+}
 
 function parseStudentNames(value: string) {
   return value.split('\n').map((line) => line.trim().replace(/^[-•]\s*/, '')).filter(Boolean).map((fullName) => {
@@ -74,6 +102,18 @@ function App() {
   const [editMembers, setEditMembers] = useState<EditableStudent[]>([])
   const [editError, setEditError] = useState('')
   const [savingEdits, setSavingEdits] = useState(false)
+  const [plannerClass, setPlannerClass] = useState<SchoolClass | null>(null)
+  const [deskType, setDeskType] = useState<DeskType>('pair')
+  const [deskRows, setDeskRows] = useState(4)
+  const [deskColumns, setDeskColumns] = useState(3)
+  const [drawMode, setDrawMode] = useState<DrawMode>('guided')
+  const [assignments, setAssignments] = useState<(string | null)[]>([])
+  const [lockedStudents, setLockedStudents] = useState<Set<string>>(new Set())
+  const [separationRules, setSeparationRules] = useState<SeparationRule[]>([])
+  const [ruleFirst, setRuleFirst] = useState('')
+  const [ruleSecond, setRuleSecond] = useState('')
+  const [plannerError, setPlannerError] = useState('')
+  const [draggedSeat, setDraggedSeat] = useState<number | null>(null)
   const [adminMode, setAdminMode] = useState<AdminMode>('single')
   const [className, setClassName] = useState('')
   const [academicYear, setAcademicYear] = useState('2026/2027')
@@ -124,6 +164,60 @@ function App() {
   }, [classes, favoriteIds, search, viewFilter])
 
   const selectedStudents = useMemo(() => selectedClass ? students.filter((student) => student.class_id === selectedClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et')) : [], [selectedClass, students])
+
+  const plannerStudents = useMemo(() => plannerClass ? students.filter((student) => student.class_id === plannerClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et')) : [], [plannerClass, students])
+  const studentById = useMemo(() => new Map(plannerStudents.map((student) => [student.id, student])), [plannerStudents])
+  const seatsPerDesk = deskType === 'pair' ? 2 : 1
+  const seatCount = deskRows * deskColumns * seatsPerDesk
+
+  function openPlanner(schoolClass: SchoolClass) {
+    setSelectedClass(null)
+    setPlannerClass(schoolClass)
+    setDeskType('pair'); setDeskRows(4); setDeskColumns(3); setDrawMode('guided')
+    setAssignments([]); setLockedStudents(new Set()); setSeparationRules([]); setRuleFirst(''); setRuleSecond(''); setPlannerError('')
+  }
+
+  function generatePlan(keepLocked = false) {
+    if (seatCount < plannerStudents.length) { setPlannerError(`Kohti on ${seatCount}, aga õpilasi ${plannerStudents.length}. Lisa laudu.`); return }
+    const locked = keepLocked ? lockedStudents : new Set<string>()
+    const base = Array<string | null>(seatCount).fill(null)
+    if (keepLocked) assignments.slice(0, seatCount).forEach((studentId, index) => { if (studentId && locked.has(studentId)) base[index] = studentId })
+    const remaining = plannerStudents.map((student) => student.id).filter((id) => !locked.has(id))
+    const freeIndexes = base.map((value, index) => value === null ? index : -1).filter((index) => index >= 0)
+    let candidate = base
+    let found = false
+    for (let attempt = 0; attempt < 2500; attempt += 1) {
+      candidate = [...base]
+      shuffle(remaining).forEach((studentId, index) => { candidate[freeIndexes[index]] = studentId })
+      if (!violatesSeparation(candidate, separationRules, deskColumns, seatsPerDesk)) { found = true; break }
+    }
+    if (!found && separationRules.length) { setPlannerError('Nende piirangutega ei leidnud sobivat paigutust. Lisa laudu või eemalda mõni piirang.'); return }
+    setAssignments(candidate); setLockedStudents(locked); setPlannerError('')
+  }
+
+  function addSeparationRule() {
+    if (!ruleFirst || !ruleSecond || ruleFirst === ruleSecond) { setPlannerError('Vali kaks erinevat õpilast.'); return }
+    if (separationRules.some((rule) => [rule.firstId, rule.secondId].includes(ruleFirst) && [rule.firstId, rule.secondId].includes(ruleSecond))) { setPlannerError('See piirang on juba lisatud.'); return }
+    setSeparationRules((current) => [...current, { firstId: ruleFirst, secondId: ruleSecond }])
+    setRuleFirst(''); setRuleSecond(''); setPlannerError('')
+  }
+
+  function moveStudent(fromIndex: number, toIndex: number) {
+    setAssignments((current) => {
+      const next = [...current]
+      ;[next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]]
+      return next
+    })
+    setPlannerError('')
+  }
+
+  function toggleStudentLock(studentId: string) {
+    setLockedStudents((current) => {
+      const next = new Set(current)
+      next.has(studentId) ? next.delete(studentId) : next.add(studentId)
+      return next
+    })
+  }
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(''); setMessage('')
@@ -314,8 +408,50 @@ function App() {
       {selectedClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedClass(null)}><section className="modal roster-modal" role="dialog" aria-modal="true" aria-labelledby="roster-title">
         <div className="modal-header"><div><span className="eyebrow">{selectedClass.academic_year}</span><h2 id="roster-title">{selectedClass.name}</h2><p>{selectedStudents.length} õpilast</p></div><button className="icon-button" onClick={() => setSelectedClass(null)} aria-label="Sulge">×</button></div>
         {selectedStudents.length ? <ol className="student-list">{selectedStudents.map((student) => <li key={student.id}><span>{student.first_name} {student.last_name}</span></li>)}</ol> : <div className="mini-empty">Selles klassis pole veel õpilasi.</div>}
-        <div className="modal-actions">{profile?.role === 'admin' && <button className="button button--ghost button--edit" onClick={() => openClassEditor(selectedClass)}>Muuda klassi</button>}<button className="button button--ghost" onClick={() => setSelectedClass(null)}>Sulge</button><button className="button" disabled>Koosta isteplaan →</button></div><p className="coming-soon">Isteplaani koostamine lisandub järgmises etapis.</p>
+        <div className="modal-actions">{profile?.role === 'admin' && <button className="button button--ghost button--edit" onClick={() => openClassEditor(selectedClass)}>Muuda klassi</button>}<button className="button button--ghost" onClick={() => setSelectedClass(null)}>Sulge</button><button className="button" onClick={() => openPlanner(selectedClass)}>Koosta isteplaan →</button></div>
       </section></div>}
+
+      {plannerClass && <div className="planner-page">
+        <header className="planner-topbar"><div><button className="back-button" onClick={() => setPlannerClass(null)}>← Tagasi</button><span>{plannerClass.name} · {plannerStudents.length} õpilast</span></div><strong>Isteplaani koostaja</strong></header>
+        <main className="planner-layout">
+          <aside className="planner-controls">
+            <div><span className="eyebrow">1. Klassiruum</span><h2>Lauad ja kohad</h2></div>
+            <div className="option-grid"><button className={deskType === 'pair' ? 'active' : ''} onClick={() => { setDeskType('pair'); setAssignments([]) }}><strong>▭ Paarislauad</strong><span>Kaks õpilast laua kohta</span></button><button className={deskType === 'single' ? 'active' : ''} onClick={() => { setDeskType('single'); setAssignments([]) }}><strong>□ Üksikud lauad</strong><span>Üks õpilane laua kohta</span></button></div>
+            <div className="number-fields"><label>Ridu<input type="number" min="1" max="10" value={deskRows} onChange={(event) => { setDeskRows(Math.max(1, Number(event.target.value))); setAssignments([]) }} /></label><label>Veerge<input type="number" min="1" max="10" value={deskColumns} onChange={(event) => { setDeskColumns(Math.max(1, Number(event.target.value))); setAssignments([]) }} /></label><div><span>Kohti</span><strong className={seatCount < plannerStudents.length ? 'capacity-bad' : ''}>{seatCount}</strong></div></div>
+
+            <div className="control-divider" />
+            <div><span className="eyebrow">2. Loosimine</span><h2>Vali meetod</h2></div>
+            <div className="option-grid"><button className={drawMode === 'random' ? 'active' : ''} onClick={() => setDrawMode('random')}><strong>🎲 Juhuslik</strong><span>Kõik kohad loositakse</span></button><button className={drawMode === 'guided' ? 'active' : ''} onClick={() => setDrawMode('guided')}><strong>🎯 Juhitud</strong><span>Lukusta valitud kohad</span></button></div>
+
+            <div className="control-divider" />
+            <div><span className="eyebrow">3. Piirangud</span><h2>Ei tohi lähestikku</h2><p className="control-help">Neid õpilasi ei paigutata samasse lauda ega kõrvuti, ette või taha.</p></div>
+            <div className="rule-picker"><select value={ruleFirst} onChange={(event) => setRuleFirst(event.target.value)}><option value="">Vali esimene…</option>{plannerStudents.map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><select value={ruleSecond} onChange={(event) => setRuleSecond(event.target.value)}><option value="">Vali teine…</option>{plannerStudents.filter((student) => student.id !== ruleFirst).map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><button type="button" onClick={addSeparationRule}>+ Lisa</button></div>
+            {separationRules.length > 0 && <div className="rule-list">{separationRules.map((rule, index) => <div key={`${rule.firstId}-${rule.secondId}`}><span>{studentById.get(rule.firstId)?.first_name} ↔ {studentById.get(rule.secondId)?.first_name}</span><button onClick={() => setSeparationRules((current) => current.filter((_, ruleIndex) => ruleIndex !== index))}>×</button></div>)}</div>}
+            {plannerError && <div className="notice notice--error" role="alert">{plannerError}</div>}
+            <button className="button button--wide draw-button" onClick={() => generatePlan(drawMode === 'guided' && assignments.length === seatCount)}>{assignments.length === seatCount ? drawMode === 'guided' ? '🎲 Loosi lukustamata kohad' : '🎲 Loosi uuesti' : '🎲 Loo isteplaan'}</button>
+          </aside>
+
+          <section className="planner-preview">
+            <div className="preview-heading"><div><span className="eyebrow">Eelvaade</span><h1>{plannerClass.name}</h1></div>{drawMode === 'guided' && assignments.length === seatCount && <p>↕ Lohista nimed ümber ja lukusta need, kelle koht peab säilima.</p>}</div>
+            <div className="classroom-canvas">
+              {assignments.length === seatCount ? <div className="desk-grid" style={{ gridTemplateColumns: `repeat(${deskColumns}, minmax(110px, 1fr))` }}>
+                {Array.from({ length: deskRows * deskColumns }, (_, deskIndex) => <div className={`desk desk--${deskType}`} key={deskIndex}>
+                  {Array.from({ length: seatsPerDesk }, (_, position) => {
+                    const seatIndex = deskIndex * seatsPerDesk + position
+                    const studentId = assignments[seatIndex]
+                    const student = studentId ? studentById.get(studentId) : null
+                    return <div className={`seat ${studentId && lockedStudents.has(studentId) ? 'seat--locked' : ''}`} key={seatIndex} draggable={Boolean(student) && drawMode === 'guided'} onDragStart={() => setDraggedSeat(seatIndex)} onDragOver={(event) => drawMode === 'guided' && event.preventDefault()} onDrop={() => { if (draggedSeat !== null && draggedSeat !== seatIndex) moveStudent(draggedSeat, seatIndex); setDraggedSeat(null) }}>
+                      {student && <><span>{student.first_name}<small>{student.last_name}</small></span>{drawMode === 'guided' && <button title={lockedStudents.has(student.id) ? 'Vabasta koht' : 'Lukusta koht'} onClick={() => toggleStudentLock(student.id)}>{lockedStudents.has(student.id) ? '🔒' : '○'}</button>}</>}
+                    </div>
+                  })}
+                </div>)}
+              </div> : <div className="preview-empty"><span>▦</span><h3>Seadista klassiruum</h3><p>Vali vasakul lauad ja vajuta „Loo isteplaan“.</p></div>}
+              <div className="class-board"><span>TAHVEL</span></div>
+            </div>
+            {assignments.length === seatCount && <div className="preview-actions"><button className="button button--ghost" onClick={() => { setAssignments([]); setLockedStudents(new Set()) }}>Alusta uuesti</button><button className="button" disabled>Jätka klassivaatesse →</button></div>}
+          </section>
+        </main>
+      </div>}
 
       {editingClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setEditingClass(null)}><section className="modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="edit-class-title">
         <div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="edit-class-title">Muuda klassi</h2><p>Paranda klassi andmeid ja õpilaste nimekirja.</p></div><button className="icon-button" onClick={() => setEditingClass(null)} aria-label="Sulge">×</button></div>
