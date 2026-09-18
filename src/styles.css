@@ -110,6 +110,7 @@ textarea { width: 100%; resize: vertical; padding: 14px 16px; border: 1px solid 
 textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, .12); }
 .field small { color: #77857e; font-size: 12px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.button--edit { margin-right: auto; }
 .student-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 30px; margin: 0; padding: 4px 0 4px 28px; counter-reset: roster; }
 .student-list li { padding: 10px 4px; border-bottom: 1px solid #edf1ee; color: #617168; }
 .student-list li span { color: #17382f; font-weight: 600; }
@@ -128,6 +129,15 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .file-drop label strong { margin: 7px 0 4px; }
 .file-drop label small { color: #7b8981; font-weight: 400; }
 .template-button { margin-top: 12px; padding: 0; border: 0; background: transparent; color: #27634f; font-size: 13px; font-weight: 700; cursor: pointer; }
+.member-editor-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 24px 0 10px; }
+.member-editor-header > div { display: grid; gap: 2px; }
+.member-editor-header span { color: #7b8981; font-size: 12px; }
+.member-editor-header .template-button { margin: 0; }
+.member-editor { max-height: 330px; overflow: auto; display: grid; gap: 7px; padding-right: 4px; }
+.member-row { display: grid; grid-template-columns: 26px 1fr 1fr 34px; align-items: center; gap: 8px; }
+.member-row > span { color: #8a978f; font-size: 12px; text-align: center; }
+.member-row input { padding: 10px 11px; }
+.member-row button { width: 32px; height: 32px; border: 0; border-radius: 9px; background: #f8e9e7; color: #9a3d35; font-size: 20px; cursor: pointer; }
 
 @media (max-width: 800px) {
   .login-page { padding: 0; place-items: stretch; }
@@ -146,6 +156,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .search-input { width: 100%; }
   .class-grid { grid-template-columns: 1fr; }
   .field-row, .student-list { grid-template-columns: 1fr; }
+  .member-row { grid-template-columns: 22px 1fr 1fr 32px; gap: 5px; }
   .modal-backdrop { padding: 12px; }
   .modal { padding: 24px 20px; max-height: calc(100vh - 24px); }
 }
