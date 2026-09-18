@@ -14,6 +14,8 @@ type AdminMode = 'single' | 'import'
 type DeskType = 'single' | 'pair'
 type DrawMode = 'random' | 'guided'
 type SeparationRule = { firstId: string; secondId: string }
+type StoredSeat = { student_id: string | null; disabled?: boolean }
+type SeatingPlan = { id: string; class_id: string; name: string; rows: number; cols: number; seat_type: DeskType; mode: DrawMode; seats: StoredSeat[]; avoid_pairs: SeparationRule[]; updated_at: string }
 
 function shuffle<T>(items: T[]) {
   const result = [...items]
@@ -92,6 +94,7 @@ function App() {
   const [classes, setClasses] = useState<SchoolClass[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
+  const [savedPlans, setSavedPlans] = useState<SeatingPlan[]>([])
   const [viewFilter, setViewFilter] = useState<ViewFilter>('favorites')
   const [search, setSearch] = useState('')
   const [selectedClass, setSelectedClass] = useState<SchoolClass | null>(null)
@@ -115,6 +118,13 @@ function App() {
   const [ruleSecond, setRuleSecond] = useState('')
   const [plannerError, setPlannerError] = useState('')
   const [draggedSeat, setDraggedSeat] = useState<number | null>(null)
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
+  const [planName, setPlanName] = useState('')
+  const [savingPlan, setSavingPlan] = useState(false)
+  const [presentationMode, setPresentationMode] = useState(false)
+  const [drawing, setDrawing] = useState(false)
+  const [revealCount, setRevealCount] = useState(0)
+  const [animationTick, setAnimationTick] = useState(0)
   const [adminMode, setAdminMode] = useState<AdminMode>('single')
   const [className, setClassName] = useState('')
   const [academicYear, setAcademicYear] = useState('2026/2027')
@@ -133,22 +143,24 @@ function App() {
 
   useEffect(() => {
     if (!supabase || !session?.user.id) {
-      setProfile(null); setClasses([]); setStudents([]); setFavoriteIds(new Set()); return
+      setProfile(null); setClasses([]); setStudents([]); setFavoriteIds(new Set()); setSavedPlans([]); return
     }
     async function loadDashboard() {
       if (!supabase || !session) return
       setDataLoading(true); setDashboardError('')
-      const [profileResult, classesResult, studentsResult, favoritesResult] = await Promise.all([
+      const [profileResult, classesResult, studentsResult, favoritesResult, plansResult] = await Promise.all([
         supabase.from('profiles').select('display_name, role').eq('id', session.user.id).single(),
         supabase.from('school_classes').select('id, name, academic_year').eq('archived', false).order('name'),
         supabase.from('students').select('id, class_id, first_name, last_name').eq('active', true).order('last_name'),
         supabase.from('teacher_favorite_classes').select('class_id').eq('teacher_id', session.user.id),
+        supabase.from('seating_plans').select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, updated_at').eq('teacher_id', session.user.id).order('updated_at', { ascending: false }),
       ])
-      if (profileResult.error || classesResult.error || studentsResult.error || favoritesResult.error) setDashboardError('Andmeid ei õnnestunud laadida. Värskenda lehte või proovi uuesti.')
+      if (profileResult.error || classesResult.error || studentsResult.error || favoritesResult.error || plansResult.error) setDashboardError('Andmeid ei õnnestunud laadida. Värskenda lehte või proovi uuesti.')
       setProfile(profileResult.data as Profile | null)
       setClasses((classesResult.data || []) as SchoolClass[])
       setStudents((studentsResult.data || []) as Student[])
       setFavoriteIds(new Set((favoritesResult.data || []).map((favorite) => favorite.class_id)))
+      setSavedPlans((plansResult.data || []) as SeatingPlan[])
       setDataLoading(false)
     }
     loadDashboard()
@@ -173,12 +185,71 @@ function App() {
   const totalSeatSlots = totalDeskCount * seatsPerDesk
   const seatCount = (totalDeskCount - disabledDesks.size) * seatsPerDesk
   const planGenerated = assignments.length === totalSeatSlots
+  const revealOrder = useMemo(() => Array.from({ length: totalSeatSlots }, (_, index) => index)
+    .filter((index) => !disabledDesks.has(Math.floor(index / seatsPerDesk)) && assignments[index])
+    .sort((first, second) => {
+      const firstDesk = Math.floor(first / seatsPerDesk)
+      const secondDesk = Math.floor(second / seatsPerDesk)
+      const rowDifference = Math.floor(secondDesk / deskColumns) - Math.floor(firstDesk / deskColumns)
+      return rowDifference || firstDesk - secondDesk || first - second
+    }), [assignments, deskColumns, disabledDesks, seatsPerDesk, totalSeatSlots])
+
+  useEffect(() => {
+    if (!drawing) return
+    const ticker = window.setInterval(() => setAnimationTick((current) => current + 1), 110)
+    const revealer = window.setInterval(() => setRevealCount((current) => {
+      if (current >= plannerStudents.length - 1) { window.clearInterval(revealer); setDrawing(false); return plannerStudents.length }
+      return current + 1
+    }), 430)
+    return () => { window.clearInterval(ticker); window.clearInterval(revealer) }
+  }, [drawing, plannerStudents.length])
 
   function openPlanner(schoolClass: SchoolClass) {
     setSelectedClass(null)
     setPlannerClass(schoolClass)
     setDeskType('pair'); setDeskRows(4); setDeskColumns(3); setDisabledDesks(new Set()); setDrawMode('guided')
-    setAssignments([]); setLockedStudents(new Set()); setSeparationRules([]); setRuleFirst(''); setRuleSecond(''); setPlannerError('')
+    setAssignments([]); setLockedStudents(new Set()); setSeparationRules([]); setRuleFirst(''); setRuleSecond(''); setPlannerError(''); setEditingPlanId(null); setPlanName(`${schoolClass.name} isteplaan`)
+  }
+
+  function openSavedPlan(plan: SeatingPlan, showPresentation = false) {
+    const schoolClass = classes.find((item) => item.id === plan.class_id)
+    if (!schoolClass) return
+    const seatMultiplier = plan.seat_type === 'pair' ? 2 : 1
+    setSelectedClass(null); setPlannerClass(schoolClass); setDeskRows(plan.rows); setDeskColumns(plan.cols); setDeskType(plan.seat_type); setDrawMode(plan.mode)
+    setAssignments(plan.seats.map((seat) => seat.student_id || null))
+    setDisabledDesks(new Set(plan.seats.flatMap((seat, index) => seat.disabled ? [Math.floor(index / seatMultiplier)] : [])))
+    setSeparationRules(plan.avoid_pairs || []); setLockedStudents(new Set()); setEditingPlanId(plan.id); setPlanName(plan.name); setPlannerError('')
+    setPresentationMode(showPresentation); setRevealCount(0); setDrawing(false)
+  }
+
+  async function savePlan() {
+    if (!supabase || !session || !plannerClass || !planGenerated) return
+    if (!planName.trim()) { setPlannerError('Pane isteplaanile nimi.'); return }
+    setSavingPlan(true); setPlannerError('')
+    const payload = {
+      teacher_id: session.user.id, class_id: plannerClass.id, name: planName.trim(), rows: deskRows, cols: deskColumns,
+      seat_type: deskType, mode: drawMode,
+      seats: assignments.map((studentId, index) => ({ student_id: studentId, disabled: disabledDesks.has(Math.floor(index / seatsPerDesk)) })),
+      avoid_pairs: separationRules,
+    }
+    const result = editingPlanId
+      ? await supabase.from('seating_plans').update(payload).eq('id', editingPlanId).select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, updated_at').single()
+      : await supabase.from('seating_plans').insert(payload).select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, updated_at').single()
+    setSavingPlan(false)
+    if (result.error || !result.data) { setPlannerError('Isteplaani salvestamine ei õnnestunud. Proovi uuesti.'); return }
+    const saved = result.data as SeatingPlan
+    setEditingPlanId(saved.id)
+    setSavedPlans((current) => [saved, ...current.filter((plan) => plan.id !== saved.id)])
+    setDashboardNotice(`Isteplaan „${saved.name}“ on salvestatud.`)
+  }
+
+  function startPresentation() {
+    if (!planGenerated) return
+    setPresentationMode(true); setRevealCount(0); setAnimationTick(0); setDrawing(false)
+  }
+
+  function beginDraw() {
+    setRevealCount(0); setAnimationTick(0); setDrawing(true)
   }
 
   function generatePlan(keepLocked = false) {
@@ -430,6 +501,7 @@ function App() {
       {selectedClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedClass(null)}><section className="modal roster-modal" role="dialog" aria-modal="true" aria-labelledby="roster-title">
         <div className="modal-header"><div><span className="eyebrow">{selectedClass.academic_year}</span><h2 id="roster-title">{selectedClass.name}</h2><p>{selectedStudents.length} õpilast</p></div><button className="icon-button" onClick={() => setSelectedClass(null)} aria-label="Sulge">×</button></div>
         {selectedStudents.length ? <ol className="student-list">{selectedStudents.map((student) => <li key={student.id}><span>{student.first_name} {student.last_name}</span></li>)}</ol> : <div className="mini-empty">Selles klassis pole veel õpilasi.</div>}
+        {savedPlans.some((plan) => plan.class_id === selectedClass.id) && <div className="saved-plan-list"><strong>Minu salvestatud plaanid</strong>{savedPlans.filter((plan) => plan.class_id === selectedClass.id).map((plan) => <div key={plan.id}><span><b>{plan.name}</b><small>Muudetud {new Date(plan.updated_at).toLocaleDateString('et-EE')}</small></span><button onClick={() => openSavedPlan(plan)}>Muuda</button><button onClick={() => openSavedPlan(plan, true)}>Klassivaade</button></div>)}</div>}
         <div className="modal-actions">{profile?.role === 'admin' && <button className="button button--ghost button--edit" onClick={() => openClassEditor(selectedClass)}>Muuda klassi</button>}<button className="button button--ghost" onClick={() => setSelectedClass(null)}>Sulge</button><button className="button" onClick={() => openPlanner(selectedClass)}>Koosta isteplaan →</button></div>
       </section></div>}
 
@@ -475,9 +547,31 @@ function App() {
               {!planGenerated && <p className="canvas-hint">Eemalda vajaduse korral üleliigsed lauad ja vajuta seejärel „Loo isteplaan“.</p>}
               <div className="class-board"><span>TAHVEL</span></div>
             </div>
-            {planGenerated && <div className="preview-actions"><button className="button button--ghost" onClick={() => { setAssignments([]); setLockedStudents(new Set()) }}>Alusta uuesti</button><button className="button" disabled>Jätka klassivaatesse →</button></div>}
+            {planGenerated && <div className="plan-finish"><label>Isteplaani nimi<input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder={`${plannerClass.name} isteplaan`} /></label><div className="preview-actions"><button className="button button--ghost" onClick={() => { setAssignments([]); setLockedStudents(new Set()) }}>Alusta uuesti</button><button className="button button--ghost" onClick={savePlan} disabled={savingPlan}>{savingPlan ? 'Salvestan…' : editingPlanId ? 'Salvesta muudatused' : 'Salvesta plaan'}</button><button className="button" onClick={startPresentation}>Ava klassivaade →</button></div></div>}
           </section>
         </main>
+      </div>}
+
+      {presentationMode && plannerClass && <div className="presentation-view">
+        <header><div><span className="eyebrow">Kohtade loosimine</span><h1>{plannerClass.name}</h1></div><button onClick={() => { setPresentationMode(false); setDrawing(false) }}>×</button></header>
+        <main className="presentation-room">
+          <div className="presentation-grid" style={{ gridTemplateColumns: `repeat(${deskColumns}, minmax(130px, 1fr))` }}>
+            {Array.from({ length: totalDeskCount }, (_, deskIndex) => disabledDesks.has(deskIndex) ? <div key={deskIndex} /> : <div className={`presentation-desk presentation-desk--${deskType}`} key={deskIndex}>
+              {Array.from({ length: seatsPerDesk }, (_, position) => {
+                const seatIndex = deskIndex * seatsPerDesk + position
+                const studentId = assignments[seatIndex]
+                const student = studentId ? studentById.get(studentId) : null
+                const orderIndex = revealOrder.indexOf(seatIndex)
+                const settled = orderIndex >= 0 && orderIndex < revealCount
+                const rollingStudent = plannerStudents.length ? plannerStudents[(animationTick + seatIndex * 3) % plannerStudents.length] : null
+                const visibleStudent = settled ? student : drawing ? rollingStudent : null
+                return <div className={`presentation-seat ${settled ? 'presentation-seat--settled' : drawing ? 'presentation-seat--rolling' : ''}`} key={seatIndex}>{visibleStudent && <><strong>{visibleStudent.first_name}</strong><span>{visibleStudent.last_name}</span></>}</div>
+              })}
+            </div>)}
+          </div>
+          <div className="presentation-board">TAHVEL</div>
+        </main>
+        <footer>{revealCount < revealOrder.length ? <button className="draw-start" onClick={beginDraw} disabled={drawing}>{drawing ? 'LOOSIMINE KÄIB…' : '🎲 LOOSI UUED KOHAD'}</button> : <><span>Kohad on loositud!</span><button className="button button--ghost" onClick={beginDraw}>Loosi uuesti</button></>}</footer>
       </div>}
 
       {editingClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setEditingClass(null)}><section className="modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="edit-class-title">
