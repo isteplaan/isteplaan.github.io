@@ -13,11 +13,11 @@ type Student = { id: string; class_id: string; first_name: string; last_name: st
 type EditableStudent = { id?: string; first_name: string; last_name: string }
 type ViewFilter = 'favorites' | 'all'
 type AdminMode = 'single' | 'import'
-type DeskType = 'single' | 'pair'
+type DeskType = 'single' | 'pair' | 'mixed'
 type DrawMode = 'random' | 'guided'
 type ActivityType = 'seating' | 'groups'
 type SeparationRule = { firstId: string; secondId: string; setId?: string }
-type StoredSeat = { student_id: string | null; disabled?: boolean; group?: number; solo?: boolean }
+type StoredSeat = { student_id: string | null; disabled?: boolean; group?: number; solo?: boolean; desk_size?: number }
 type SeatingPlan = { id: string; class_id: string; name: string; rows: number; cols: number; seat_type: DeskType; mode: DrawMode; seats: StoredSeat[]; avoid_pairs: SeparationRule[]; activity_type: ActivityType; group_size: number | null; absent_students: string[]; updated_at: string }
 type AdminUser = { user_id: string; email: string; display_name: string | null; role: 'teacher' | 'admin'; active: boolean; joined_at: string; last_seen_at: string | null; favorite_classes: string[]; saved_classes: string[]; plan_count: number }
 
@@ -140,6 +140,7 @@ function App() {
   const [deskRows, setDeskRows] = useState(4)
   const [deskColumns, setDeskColumns] = useState(3)
   const [disabledDesks, setDisabledDesks] = useState<Set<number>>(new Set())
+  const [deskCapacities, setDeskCapacities] = useState<number[]>(Array(12).fill(2))
   const [drawMode, setDrawMode] = useState<DrawMode>('guided')
   const [activityType, setActivityType] = useState<ActivityType>('seating')
   const [groupSize, setGroupSize] = useState(4)
@@ -267,20 +268,24 @@ function App() {
     return [...grouped.entries()].map(([id, members]) => ({ id, members: [...members] }))
   }, [separationRules])
   const studentById = useMemo(() => new Map(plannerStudents.map((student) => [student.id, student])), [plannerStudents])
-  const seatsPerDesk = deskType === 'pair' ? 2 : 1
+  const seatsPerDesk = deskType === 'mixed' ? 3 : deskType === 'pair' ? 2 : 1
   const totalDeskCount = deskRows * deskColumns
   const totalSeatSlots = totalDeskCount * seatsPerDesk
-  const seatCount = (totalDeskCount - disabledDesks.size) * seatsPerDesk
+  const capacityForDesk = (deskIndex: number) => deskType === 'mixed' ? (deskCapacities[deskIndex] || 2) : seatsPerDesk
+  const seatCount = Array.from({ length: totalDeskCount }, (_, deskIndex) => disabledDesks.has(deskIndex) ? 0 : capacityForDesk(deskIndex)).reduce((sum, capacity) => sum + capacity, 0)
   const planGenerated = assignments.length === totalSeatSlots
   const resultGenerated = activityType === 'groups' ? groups.length > 0 : planGenerated
   const revealOrder = useMemo(() => Array.from({ length: totalSeatSlots }, (_, index) => index)
-    .filter((index) => !disabledDesks.has(Math.floor(index / seatsPerDesk)) && assignments[index])
+    .filter((index) => {
+      const deskIndex = Math.floor(index / seatsPerDesk)
+      return !disabledDesks.has(deskIndex) && index % seatsPerDesk < capacityForDesk(deskIndex) && assignments[index]
+    })
     .sort((first, second) => {
       const firstDesk = Math.floor(first / seatsPerDesk)
       const secondDesk = Math.floor(second / seatsPerDesk)
       const rowDifference = Math.floor(secondDesk / deskColumns) - Math.floor(firstDesk / deskColumns)
       return rowDifference || firstDesk - secondDesk || first - second
-    }), [assignments, deskColumns, disabledDesks, seatsPerDesk, totalSeatSlots])
+    }), [assignments, deskCapacities, deskColumns, deskType, disabledDesks, seatsPerDesk, totalSeatSlots])
   const presentationItemCount = activityType === 'groups' ? groups.flat().length : revealOrder.length
 
   useEffect(() => {
@@ -296,7 +301,7 @@ function App() {
   function openPlanner(schoolClass: SchoolClass) {
     setSelectedClass(null)
     setPlannerClass(schoolClass)
-    setDeskType('pair'); setDeskRows(4); setDeskColumns(3); setDisabledDesks(new Set()); setDrawMode('guided'); setActivityType('seating'); setGroupSize(4); setGroups([]); setGroupRuleSelection(new Set()); setGroupRuleSearch(''); setDraggedGroupMember(null); setAbsentStudentIds(new Set()); setAbsenceSearch(''); setSoloStudentIds(new Set()); setSoloSearch('')
+    setDeskType('pair'); setDeskRows(4); setDeskColumns(3); setDisabledDesks(new Set()); setDeskCapacities(Array(12).fill(2)); setDrawMode('guided'); setActivityType('seating'); setGroupSize(4); setGroups([]); setGroupRuleSelection(new Set()); setGroupRuleSearch(''); setDraggedGroupMember(null); setAbsentStudentIds(new Set()); setAbsenceSearch(''); setSoloStudentIds(new Set()); setSoloSearch('')
     setAssignments([]); setLockedStudents(new Set()); setSeparationRules([]); setRuleFirst(''); setRuleSecond(''); setPlannerError(''); setEditingPlanId(null); setPlanName(`${schoolClass.name} isteplaan`)
   }
 
@@ -310,13 +315,15 @@ function App() {
   function applySavedPlan(plan: SeatingPlan, showPresentation = false, absences = new Set<string>()) {
     const schoolClass = classes.find((item) => item.id === plan.class_id)
     if (!schoolClass) return
-    const seatMultiplier = plan.seat_type === 'pair' ? 2 : 1
+    const seatMultiplier = plan.seat_type === 'mixed' ? 3 : plan.seat_type === 'pair' ? 2 : 1
     const nextActivity = plan.activity_type || 'seating'
+    const loadedDeskCapacities = Array.from({ length: plan.rows * plan.cols }, (_, deskIndex) => plan.seat_type === 'mixed' ? Math.max(1, Math.min(3, plan.seats[deskIndex * 3]?.desk_size || 2)) : seatMultiplier)
     setSelectedClass(null); setPlannerClass(schoolClass); setDeskRows(plan.rows); setDeskColumns(plan.cols); setDeskType(plan.seat_type); setDrawMode(plan.mode); setActivityType(nextActivity); setGroupSize(plan.group_size || 4); setAbsentStudentIds(absences)
+    setDeskCapacities(loadedDeskCapacities)
     if (nextActivity === 'seating') {
       const loadedAssignments = plan.seats.map((seat) => seat.student_id || null)
       const returningIds = (plan.absent_students || []).filter((id) => !absences.has(id))
-      const freeIndexes = loadedAssignments.map((value, index) => !value && !plan.seats[index]?.disabled ? index : -1).filter((index) => index >= 0).sort((a, b) => b - a)
+      const freeIndexes = loadedAssignments.map((value, index) => !value && !plan.seats[index]?.disabled && index % seatMultiplier < loadedDeskCapacities[Math.floor(index / seatMultiplier)] ? index : -1).filter((index) => index >= 0).sort((a, b) => b - a)
       returningIds.forEach((id, index) => { if (freeIndexes[index] !== undefined) loadedAssignments[freeIndexes[index]] = id })
       setAssignments(loadedAssignments)
       setSoloStudentIds(new Set(plan.seats.filter((seat) => seat.student_id && seat.solo).map((seat) => seat.student_id as string)))
@@ -348,7 +355,7 @@ function App() {
     const payload = {
       teacher_id: session.user.id, class_id: plannerClass.id, name: planName.trim(), rows: deskRows, cols: deskColumns,
       seat_type: deskType, mode: drawMode, activity_type: activityType, group_size: activityType === 'groups' ? groupSize : null,
-      seats: activityType === 'groups' ? groups.flatMap((group, groupIndex) => group.map((studentId) => ({ student_id: studentId, group: groupIndex }))) : assignments.map((studentId, index) => ({ student_id: studentId, disabled: disabledDesks.has(Math.floor(index / seatsPerDesk)), solo: Boolean(studentId && soloStudentIds.has(studentId)) })),
+      seats: activityType === 'groups' ? groups.flatMap((group, groupIndex) => group.map((studentId) => ({ student_id: studentId, group: groupIndex }))) : assignments.map((studentId, index) => ({ student_id: studentId, disabled: disabledDesks.has(Math.floor(index / seatsPerDesk)), solo: Boolean(studentId && soloStudentIds.has(studentId)), desk_size: capacityForDesk(Math.floor(index / seatsPerDesk)) })),
       avoid_pairs: separationRules, absent_students: [...absentStudentIds],
     }
     const result = editingPlanId
@@ -410,9 +417,9 @@ function App() {
     }
     if (seatCount < presentStudents.length) { setPlannerError(`Kohti on ${seatCount}, aga kohal on ${presentStudents.length} õpilast. Lisa laudu.`); return }
     const presentSoloIds = new Set([...soloStudentIds].filter((id) => presentStudents.some((student) => student.id === id)))
-    const availableDeskCount = totalDeskCount - disabledDesks.size
-    const requiredDeskCount = deskType === 'pair' ? presentSoloIds.size + Math.ceil((presentStudents.length - presentSoloIds.size) / 2) : presentStudents.length
-    if (requiredDeskCount > availableDeskCount) { setPlannerError(`${presentSoloIds.size} õpilast soovib üksi istuda, kuid selleks pole piisavalt laudu. Lisa laudu või vähenda üksinda istujate arvu.`); return }
+    const availableCapacities = Array.from({ length: totalDeskCount }, (_, deskIndex) => disabledDesks.has(deskIndex) ? 0 : capacityForDesk(deskIndex)).filter(Boolean).sort((first, second) => first - second)
+    const capacityAfterSoloDesks = availableCapacities.slice(presentSoloIds.size).reduce((sum, capacity) => sum + capacity, 0)
+    if (presentSoloIds.size > availableCapacities.length || capacityAfterSoloDesks < presentStudents.length - presentSoloIds.size) { setPlannerError(`${presentSoloIds.size} õpilast soovib üksi istuda, kuid selle paigutusega pole piisavalt laudu. Lisa laudu, suurenda mõne laua kohtade arvu või vähenda üksinda istujate arvu.`); return }
     const locked = keepLocked ? lockedStudents : new Set<string>()
     const base = Array<string | null>(totalSeatSlots).fill(null)
     if (keepLocked) assignments.slice(0, totalSeatSlots).forEach((studentId, index) => { if (studentId && locked.has(studentId) && !disabledDesks.has(Math.floor(index / seatsPerDesk))) base[index] = studentId })
@@ -425,12 +432,13 @@ function App() {
     for (let attempt = 0; attempt < 2500; attempt += 1) {
       candidate = [...base]
       const blockedSeats = new Set<number>()
-      if (deskType === 'pair') {
+      if (seatsPerDesk > 1) {
         orderedDeskIndexes.forEach((deskIndex) => {
-          const first = deskIndex * 2
-          const second = first + 1
-          if ((candidate[first] && presentSoloIds.has(candidate[first]!)) || (candidate[second] && presentSoloIds.has(candidate[second]!))) {
-            blockedSeats.add(candidate[first] ? second : first)
+          const first = deskIndex * seatsPerDesk
+          const deskSeats = Array.from({ length: capacityForDesk(deskIndex) }, (_, position) => first + position)
+          const soloSeat = deskSeats.find((seatIndex) => candidate[seatIndex] && presentSoloIds.has(candidate[seatIndex]!))
+          if (soloSeat !== undefined) {
+            deskSeats.filter((seatIndex) => seatIndex !== soloSeat).forEach((seatIndex) => blockedSeats.add(seatIndex))
           }
         })
       }
@@ -439,25 +447,25 @@ function App() {
       for (const studentId of remainingSolo) {
         const deskIndex = orderedDeskIndexes.find((desk) => {
           const first = desk * seatsPerDesk
-          return Array.from({ length: seatsPerDesk }, (_, position) => candidate[first + position]).every((value) => value === null)
+          return Array.from({ length: capacityForDesk(desk) }, (_, position) => candidate[first + position]).every((value) => value === null)
         })
         if (deskIndex === undefined) break
         const seatIndex = deskIndex * seatsPerDesk
         candidate[seatIndex] = studentId
-        if (deskType === 'pair') blockedSeats.add(seatIndex + 1)
+        Array.from({ length: capacityForDesk(deskIndex) - 1 }, (_, position) => seatIndex + position + 1).forEach((index) => blockedSeats.add(index))
       }
-      const freeIndexes = orderedDeskIndexes.flatMap((desk) => Array.from({ length: seatsPerDesk }, (_, position) => desk * seatsPerDesk + position))
+      const freeIndexes = orderedDeskIndexes.flatMap((desk) => Array.from({ length: capacityForDesk(desk) }, (_, position) => desk * seatsPerDesk + position))
         .filter((index) => candidate[index] === null && !blockedSeats.has(index))
       remainingOthers.forEach((studentId, index) => { if (freeIndexes[index] !== undefined) candidate[freeIndexes[index]] = studentId })
       if (candidate.filter(Boolean).length !== presentStudents.length) continue
-      const soloConflict = deskType === 'pair' && orderedDeskIndexes.some((deskIndex) => {
-        const pair = candidate.slice(deskIndex * 2, deskIndex * 2 + 2).filter((id): id is string => Boolean(id))
-        return pair.length > 1 && pair.some((id) => presentSoloIds.has(id))
+      const soloConflict = seatsPerDesk > 1 && orderedDeskIndexes.some((deskIndex) => {
+        const deskMembers = candidate.slice(deskIndex * seatsPerDesk, deskIndex * seatsPerDesk + capacityForDesk(deskIndex)).filter((id): id is string => Boolean(id))
+        return deskMembers.length > 1 && deskMembers.some((id) => presentSoloIds.has(id))
       })
       if (soloConflict) continue
       if (!violatesSeparation(candidate, separationRules, deskColumns, seatsPerDesk)) { found = true; break }
     }
-    if (!found && separationRules.length) { setPlannerError('Nende piirangutega ei leidnud sobivat paigutust. Lisa laudu või eemalda mõni piirang.'); return }
+    if (!found) { setPlannerError('Selle lauapaigutuse ja valitud erisustega ei leidnud sobivat paigutust. Lisa kohti või muuda mõnda erisust.'); return }
     setAssignments(candidate); setLockedStudents(locked); setPlannerError('')
   }
 
@@ -527,6 +535,15 @@ function App() {
     setAssignments([])
     setLockedStudents(new Set())
     setPlannerError('')
+  }
+
+  function cycleDeskCapacity(deskIndex: number) {
+    setDeskCapacities((current) => {
+      const next = Array.from({ length: totalDeskCount }, (_, index) => current[index] || 2)
+      next[deskIndex] = next[deskIndex] === 3 ? 1 : next[deskIndex] + 1
+      return next
+    })
+    setAssignments([]); setLockedStudents(new Set()); setPlannerError('')
   }
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
@@ -717,7 +734,7 @@ function App() {
     const result = await supabase.from('seating_plans').insert({
       teacher_id: session.user.id, class_id: plannerClass.id, name: `${planName.trim() || plannerClass.name} (koopia)`, rows: deskRows, cols: deskColumns,
       seat_type: deskType, mode: drawMode, activity_type: activityType, group_size: activityType === 'groups' ? groupSize : null,
-      seats: activityType === 'groups' ? groups.flatMap((group, groupIndex) => group.map((studentId) => ({ student_id: studentId, group: groupIndex }))) : assignments.map((studentId, index) => ({ student_id: studentId, disabled: disabledDesks.has(Math.floor(index / seatsPerDesk)), solo: Boolean(studentId && soloStudentIds.has(studentId)) })), avoid_pairs: separationRules, absent_students: [...absentStudentIds],
+      seats: activityType === 'groups' ? groups.flatMap((group, groupIndex) => group.map((studentId) => ({ student_id: studentId, group: groupIndex }))) : assignments.map((studentId, index) => ({ student_id: studentId, disabled: disabledDesks.has(Math.floor(index / seatsPerDesk)), solo: Boolean(studentId && soloStudentIds.has(studentId)), desk_size: capacityForDesk(Math.floor(index / seatsPerDesk)) })), avoid_pairs: separationRules, absent_students: [...absentStudentIds],
     }).select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').single()
     setSavingPlan(false)
     if (result.error || !result.data) { setPlannerError('Uue plaani salvestamine ei õnnestunud.'); return }
@@ -771,7 +788,7 @@ function App() {
 
       {showProfile && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowProfile(false)}><section className="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title"><div className="modal-header"><div><span className="eyebrow">Minu konto</span><h2 id="profile-title">Kuvatav nimi</h2><p>Seda nime näed rakenduse ülaservas.</p></div><button className="icon-button" onClick={() => setShowProfile(false)}>×</button></div><form onSubmit={saveProfileName}><div className="field"><label htmlFor="profile-name">Nimi</label><input id="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} minLength={2} maxLength={100} required /></div>{profileError && <div className="notice notice--error">{profileError}</div>}<div className="modal-actions"><button type="button" className="button button--ghost" onClick={() => setShowProfile(false)}>Loobu</button><button className="button" disabled={savingProfile}>{savingProfile ? 'Salvestan…' : 'Salvesta nimi'}</button></div></form></section></div>}
 
-      {showHelp && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHelp(false)}><section className="modal help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title"><div className="modal-header"><div><span className="eyebrow">Lühijuhend</span><h2 id="help-title">Kuidas rakendust kasutada?</h2></div><button className="icon-button" onClick={() => setShowHelp(false)}>×</button></div><div className="help-tabs" role="tablist"><button className={helpSection === 'seating' ? 'active' : ''} onClick={() => setHelpSection('seating')}>🪑 Istekohtade loosimine</button><button className={helpSection === 'groups' ? 'active' : ''} onClick={() => setHelpSection('groups')}>👥 Rühmade loosimine</button></div>{helpSection === 'seating' ? <ol className="help-steps"><li><b>Vali klass ja „Istumiskohad“.</b><span>Ava vajalik klass ning vali töövormiks istekohtade loosimine.</span></li><li><b>Märgi puudujad ja üksinda istujad.</b><span>Puudujad jäetakse loosist välja. Paarislaudade puhul saad märkida ka õpilased, kes soovivad üksi istuda.</span></li><li><b>Seadista klassiruum.</b><span>Vali paaris- või üksiklauad, ridade ja veergude arv ning eemalda eelvaates üleliigsed lauad.</span></li><li><b>Vali loosimise viis.</b><span>Juhuslik loos paigutab kõik õpilased. Juhitud loosis saad nimed paika lohistada, vajalikud kohad lukustada ja ülejäänud uuesti loosida.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Määra õpilased, kes ei tohi istuda koos ega lähestikku – samas lauas, kõrval, ees või taga.</span></li><li><b>Salvesta, esitle või ekspordi.</b><span>Pane plaanile nimi ja salvesta. Klassivaates saad loosimist näidata ning valmis plaani PDF-ina eksportida.</span></li></ol> : <ol className="help-steps"><li><b>Vali klass ja „Rühmatöö“.</b><span>Rühmade loosimine ei sõltu klassiruumi laudade arvust ega paigutusest.</span></li><li><b>Märgi puudujad.</b><span>Kasuta nime leidmiseks otsingut. Puudujad jäetakse rühmade loosist välja.</span></li><li><b>Määra rühma suurus ja loosimise viis.</b><span>Juhuslik loos loob valmis rühmad. Juhitud loosis saad pärast õpilaste nimesid rühmade vahel lohistada.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Vali üheks nimistuks õpilased, kes ei tohi omavahel samasse rühma sattuda. Võid lisada mitu eraldi nimistut.</span></li><li><b>Loosi ja kohanda rühmi.</b><span>Vajuta „Loosi rühmad“. Juhitud režiimis lohista vajaduse korral nimesid ümber; piirangut rikkuvat tõstmist ei lubata.</span></li><li><b>Salvesta rühmad.</b><span>Pane jaotusele nimi ja salvesta see, et sama rühmade jaotust hiljem uuesti kasutada.</span></li><li><b>Kontrolli järgmisel korral puudujaid.</b><span>Tagasitulev õpilane lisatakse kõige väiksemasse sobivasse rühma. Ülejäänud rühmi ümber ei loosita.</span></li></ol>}<div className="modal-actions"><button className="button" onClick={() => setShowHelp(false)}>Selge</button></div></section></div>}
+      {showHelp && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHelp(false)}><section className="modal help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title"><div className="modal-header"><div><span className="eyebrow">Lühijuhend</span><h2 id="help-title">Kuidas rakendust kasutada?</h2></div><button className="icon-button" onClick={() => setShowHelp(false)}>×</button></div><div className="help-tabs" role="tablist"><button className={helpSection === 'seating' ? 'active' : ''} onClick={() => setHelpSection('seating')}>🪑 Istekohtade loosimine</button><button className={helpSection === 'groups' ? 'active' : ''} onClick={() => setHelpSection('groups')}>👥 Rühmade loosimine</button></div>{helpSection === 'seating' ? <ol className="help-steps"><li><b>Vali klass ja „Istumiskohad“.</b><span>Ava vajalik klass ning vali töövormiks istekohtade loosimine.</span></li><li><b>Märgi puudujad ja üksinda istujad.</b><span>Puudujad jäetakse loosist välja. Mitmekohaliste laudade puhul saad märkida ka õpilased, kes soovivad üksi istuda.</span></li><li><b>Seadista klassiruum.</b><span>Vali üksikud, paaris- või hübriidlauad ning määra read ja veerud. Hübriidpaigutuses saad iga laua eraldi ühe-, kahe- või kolmekohaliseks muuta; üleliigsed lauad saab eemaldada.</span></li><li><b>Vali loosimise viis.</b><span>Juhuslik loos paigutab kõik õpilased. Juhitud loosis saad nimed paika lohistada, vajalikud kohad lukustada ja ülejäänud uuesti loosida.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Määra õpilased, kes ei tohi istuda koos ega lähestikku – samas lauas, kõrval, ees või taga.</span></li><li><b>Salvesta, esitle või ekspordi.</b><span>Pane plaanile nimi ja salvesta. Klassivaates saad loosimist näidata ning valmis plaani PDF-ina eksportida.</span></li></ol> : <ol className="help-steps"><li><b>Vali klass ja „Rühmatöö“.</b><span>Rühmade loosimine ei sõltu klassiruumi laudade arvust ega paigutusest.</span></li><li><b>Märgi puudujad.</b><span>Kasuta nime leidmiseks otsingut. Puudujad jäetakse rühmade loosist välja.</span></li><li><b>Määra rühma suurus ja loosimise viis.</b><span>Juhuslik loos loob valmis rühmad. Juhitud loosis saad pärast õpilaste nimesid rühmade vahel lohistada.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Vali üheks nimistuks õpilased, kes ei tohi omavahel samasse rühma sattuda. Võid lisada mitu eraldi nimistut.</span></li><li><b>Loosi ja kohanda rühmi.</b><span>Vajuta „Loosi rühmad“. Juhitud režiimis lohista vajaduse korral nimesid ümber; piirangut rikkuvat tõstmist ei lubata.</span></li><li><b>Salvesta rühmad.</b><span>Pane jaotusele nimi ja salvesta see, et sama rühmade jaotust hiljem uuesti kasutada.</span></li><li><b>Kontrolli järgmisel korral puudujaid.</b><span>Tagasitulev õpilane lisatakse kõige väiksemasse sobivasse rühma. Ülejäänud rühmi ümber ei loosita.</span></li></ol>}<div className="modal-actions"><button className="button" onClick={() => setShowHelp(false)}>Selge</button></div></section></div>}
 
       {showArchive && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowArchive(false)}><section className="modal archive-modal" role="dialog" aria-modal="true" aria-labelledby="archive-title"><div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="archive-title">Klasside arhiiv</h2><p>Arhiveerimine peidab klassi töölaudade vaates, kuid säilitab nimekirja ja plaanid.</p></div><button className="icon-button" onClick={() => setShowArchive(false)}>×</button></div>{archivedClasses.length ? <div className="archive-list">{archivedClasses.map((schoolClass) => <div key={schoolClass.id}><span><strong>{schoolClass.name}</strong><small>{schoolClass.academic_year} · {studentCountByClass[schoolClass.id] || 0} õpilast</small></span><button onClick={() => setClassArchived(schoolClass, false)}>Taasta</button><button className="danger-action" onClick={() => permanentlyDeleteClass(schoolClass)}>Kustuta lõplikult</button></div>)}</div> : <div className="mini-empty">Arhiiv on tühi.</div>}</section></div>}
 
@@ -808,15 +825,15 @@ function App() {
             <details className="absence-picker"><summary>Puudujad <span>{absentStudentIds.size}</span></summary><div><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={absenceSearch} onChange={(event) => setAbsenceSearch(event.target.value)} />{filteredAbsenceStudents.map((student) => <label key={student.id}><input type="checkbox" checked={absentStudentIds.has(student.id)} onChange={() => toggleAbsent(student.id)} /><span>{student.first_name} {student.last_name}</span></label>)}{!filteredAbsenceStudents.length && <small className="picker-empty">Õpilast ei leitud.</small>}</div></details>
             {activityType === 'seating' && <><div className="control-divider" />
             <div><span className="eyebrow">1. Klassiruum</span><h2>Lauad ja kohad</h2></div>
-            <div className="option-grid"><button className={deskType === 'pair' ? 'active' : ''} onClick={() => { setDeskType('pair'); setAssignments([]) }}><strong>▭ Paarislauad</strong><span>Kaks õpilast laua kohta</span></button><button className={deskType === 'single' ? 'active' : ''} onClick={() => { setDeskType('single'); setAssignments([]) }}><strong>□ Üksikud lauad</strong><span>Üks õpilane laua kohta</span></button></div>
-            <div className="number-fields"><label>Ridu<input type="number" min="1" max="10" value={deskRows} onChange={(event) => { setDeskRows(Math.max(1, Number(event.target.value))); setDisabledDesks(new Set()); setAssignments([]) }} /></label><label>Veerge<input type="number" min="1" max="10" value={deskColumns} onChange={(event) => { setDeskColumns(Math.max(1, Number(event.target.value))); setDisabledDesks(new Set()); setAssignments([]) }} /></label><div><span>Kohti</span><strong className={seatCount < plannerStudents.length ? 'capacity-bad' : ''}>{seatCount}</strong></div></div>
-            <p className="control-help">Üleliigse laua eemaldamiseks vajuta eelvaates laua nurgas ×. Eemaldatud laua saad samast kohast taastada.</p>
+            <div className="option-grid option-grid--three"><button className={deskType === 'pair' ? 'active' : ''} onClick={() => { setDeskType('pair'); setDeskCapacities(Array(totalDeskCount).fill(2)); setAssignments([]) }}><strong>▭ Paarislauad</strong><span>Kaks kohta</span></button><button className={deskType === 'single' ? 'active' : ''} onClick={() => { setDeskType('single'); setDeskCapacities(Array(totalDeskCount).fill(1)); setAssignments([]) }}><strong>□ Üksikud</strong><span>Üks koht</span></button><button className={deskType === 'mixed' ? 'active' : ''} onClick={() => { setDeskType('mixed'); setDeskCapacities(Array(totalDeskCount).fill(2)); setAssignments([]) }}><strong>▦ Hübriid</strong><span>1–3 kohta</span></button></div>
+            <div className="number-fields"><label>Ridu<input type="number" min="1" max="10" value={deskRows} onChange={(event) => { const rows = Math.max(1, Number(event.target.value)); setDeskRows(rows); setDeskCapacities(Array(rows * deskColumns).fill(deskType === 'single' ? 1 : 2)); setDisabledDesks(new Set()); setAssignments([]) }} /></label><label>Veerge<input type="number" min="1" max="10" value={deskColumns} onChange={(event) => { const columns = Math.max(1, Number(event.target.value)); setDeskColumns(columns); setDeskCapacities(Array(deskRows * columns).fill(deskType === 'single' ? 1 : 2)); setDisabledDesks(new Set()); setAssignments([]) }} /></label><div><span>Kohti</span><strong className={seatCount < plannerStudents.length ? 'capacity-bad' : ''}>{seatCount}</strong></div></div>
+            <p className="control-help">Üleliigse laua eemaldamiseks vajuta laua nurgas ×. Hübriidpaigutuses vajuta laual nuppu „1/2/3 kohta“, et muuta iga laua suurust eraldi.</p>
 
             <div className="control-divider" />
             <div><span className="eyebrow">2. Loosimine</span><h2>Vali meetod</h2></div>
             <div className="option-grid"><button className={drawMode === 'random' ? 'active' : ''} onClick={() => setDrawMode('random')}><strong>🎲 Juhuslik</strong><span>Kõik kohad loositakse</span></button><button className={drawMode === 'guided' ? 'active' : ''} onClick={() => setDrawMode('guided')}><strong>🎯 Juhitud</strong><span>Lukusta valitud kohad</span></button></div>
 
-            {deskType === 'pair' && <details className="absence-picker solo-picker"><summary>Soovib üksi istuda <span>{soloStudentIds.size}</span></summary><div><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={soloSearch} onChange={(event) => setSoloSearch(event.target.value)} />{filteredSoloStudents.map((student) => <label key={student.id}><input type="checkbox" checked={soloStudentIds.has(student.id)} onChange={() => { setSoloStudentIds((current) => { const next = new Set(current); next.has(student.id) ? next.delete(student.id) : next.add(student.id); return next }); setAssignments([]); setLockedStudents(new Set()); setPlannerError('') }} /><span>{student.first_name} {student.last_name}</span></label>)}</div></details>}
+            {deskType !== 'single' && <details className="absence-picker solo-picker"><summary>Soovib üksi istuda <span>{soloStudentIds.size}</span></summary><div><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={soloSearch} onChange={(event) => setSoloSearch(event.target.value)} />{filteredSoloStudents.map((student) => <label key={student.id}><input type="checkbox" checked={soloStudentIds.has(student.id)} onChange={() => { setSoloStudentIds((current) => { const next = new Set(current); next.has(student.id) ? next.delete(student.id) : next.add(student.id); return next }); setAssignments([]); setLockedStudents(new Set()); setPlannerError('') }} /><span>{student.first_name} {student.last_name}</span></label>)}</div></details>}
 
             <div className="control-divider" />
             <div><span className="eyebrow">3. Piirangud</span><h2>Ei tohi lähestikku</h2><p className="control-help">Neid õpilasi ei paigutata samasse lauda ega kõrvuti, ette või taha.</p></div>
@@ -836,9 +853,10 @@ function App() {
               <div className="desk-grid" style={{ gridTemplateColumns: `repeat(${deskColumns}, minmax(110px, 1fr))` }}>
                 {Array.from({ length: totalDeskCount }, (_, deskIndex) => disabledDesks.has(deskIndex)
                   ? <button className="desk-placeholder" key={deskIndex} onClick={() => toggleDesk(deskIndex)} title="Taasta laud"><span>+ Taasta laud</span></button>
-                  : <div className={`desk desk--${deskType}`} key={deskIndex}>
+                  : <div className={`desk desk--${capacityForDesk(deskIndex)}`} key={deskIndex}>
                     <button className="desk-remove" onClick={() => toggleDesk(deskIndex)} title="Eemalda laud" aria-label={`Eemalda laud ${deskIndex + 1}`}>×</button>
-                    {Array.from({ length: seatsPerDesk }, (_, position) => {
+                    {deskType === 'mixed' && <button className="desk-size-toggle" onClick={() => cycleDeskCapacity(deskIndex)} title="Muuda laua kohtade arvu">{capacityForDesk(deskIndex)} kohta</button>}
+                    {Array.from({ length: capacityForDesk(deskIndex) }, (_, position) => {
                       const seatIndex = deskIndex * seatsPerDesk + position
                       const studentId = assignments[seatIndex]
                       const student = studentId ? studentById.get(studentId) : null
@@ -860,8 +878,8 @@ function App() {
         <header><div><img className="presentation-logo" src={logoUrl} alt="Loo Kool" /><span><span className="eyebrow">{activityType === 'groups' ? 'Rühmade loosimine' : 'Kohtade loosimine'}</span><h1>{plannerClass.name}</h1></span></div><button onClick={() => { setPresentationMode(false); setDrawing(false) }}>×</button></header>
         <main className="presentation-room">
           {activityType === 'groups' ? <div className="presentation-groups">{groups.map((group, groupIndex) => <article key={groupIndex}><h2>Rühm {groupIndex + 1}</h2>{group.map((studentId) => { const student = studentById.get(studentId); const memberIndex = groups.flat().indexOf(studentId); const visible = memberIndex < revealCount; const rollingStudent = plannerStudents.length ? plannerStudents[(animationTick + memberIndex * 2) % plannerStudents.length] : null; const shown = visible ? student : drawing ? rollingStudent : null; return <span className={visible ? 'group-member--settled' : ''} key={studentId}>{shown ? `${shown.first_name} ${shown.last_name}` : ' '}</span> })}</article>)}</div> : <><div className="presentation-grid" style={{ gridTemplateColumns: `repeat(${deskColumns}, minmax(130px, 1fr))` }}>
-            {Array.from({ length: totalDeskCount }, (_, deskIndex) => disabledDesks.has(deskIndex) ? <div key={deskIndex} /> : <div className={`presentation-desk presentation-desk--${deskType}`} key={deskIndex}>
-              {Array.from({ length: seatsPerDesk }, (_, position) => {
+            {Array.from({ length: totalDeskCount }, (_, deskIndex) => disabledDesks.has(deskIndex) ? <div key={deskIndex} /> : <div className={`presentation-desk presentation-desk--${capacityForDesk(deskIndex)}`} key={deskIndex}>
+              {Array.from({ length: capacityForDesk(deskIndex) }, (_, position) => {
                 const seatIndex = deskIndex * seatsPerDesk + position
                 const studentId = assignments[seatIndex]
                 const student = studentId ? studentById.get(studentId) : null
