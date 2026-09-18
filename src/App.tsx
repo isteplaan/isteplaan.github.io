@@ -106,6 +106,7 @@ function App() {
   const [deskType, setDeskType] = useState<DeskType>('pair')
   const [deskRows, setDeskRows] = useState(4)
   const [deskColumns, setDeskColumns] = useState(3)
+  const [disabledDesks, setDisabledDesks] = useState<Set<number>>(new Set())
   const [drawMode, setDrawMode] = useState<DrawMode>('guided')
   const [assignments, setAssignments] = useState<(string | null)[]>([])
   const [lockedStudents, setLockedStudents] = useState<Set<string>>(new Set())
@@ -168,22 +169,32 @@ function App() {
   const plannerStudents = useMemo(() => plannerClass ? students.filter((student) => student.class_id === plannerClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et')) : [], [plannerClass, students])
   const studentById = useMemo(() => new Map(plannerStudents.map((student) => [student.id, student])), [plannerStudents])
   const seatsPerDesk = deskType === 'pair' ? 2 : 1
-  const seatCount = deskRows * deskColumns * seatsPerDesk
+  const totalDeskCount = deskRows * deskColumns
+  const totalSeatSlots = totalDeskCount * seatsPerDesk
+  const seatCount = (totalDeskCount - disabledDesks.size) * seatsPerDesk
+  const planGenerated = assignments.length === totalSeatSlots
 
   function openPlanner(schoolClass: SchoolClass) {
     setSelectedClass(null)
     setPlannerClass(schoolClass)
-    setDeskType('pair'); setDeskRows(4); setDeskColumns(3); setDrawMode('guided')
+    setDeskType('pair'); setDeskRows(4); setDeskColumns(3); setDisabledDesks(new Set()); setDrawMode('guided')
     setAssignments([]); setLockedStudents(new Set()); setSeparationRules([]); setRuleFirst(''); setRuleSecond(''); setPlannerError('')
   }
 
   function generatePlan(keepLocked = false) {
     if (seatCount < plannerStudents.length) { setPlannerError(`Kohti on ${seatCount}, aga õpilasi ${plannerStudents.length}. Lisa laudu.`); return }
     const locked = keepLocked ? lockedStudents : new Set<string>()
-    const base = Array<string | null>(seatCount).fill(null)
-    if (keepLocked) assignments.slice(0, seatCount).forEach((studentId, index) => { if (studentId && locked.has(studentId)) base[index] = studentId })
+    const base = Array<string | null>(totalSeatSlots).fill(null)
+    if (keepLocked) assignments.slice(0, totalSeatSlots).forEach((studentId, index) => { if (studentId && locked.has(studentId) && !disabledDesks.has(Math.floor(index / seatsPerDesk))) base[index] = studentId })
     const remaining = plannerStudents.map((student) => student.id).filter((id) => !locked.has(id))
-    const freeIndexes = base.map((value, index) => value === null ? index : -1).filter((index) => index >= 0)
+    const freeIndexes = Array.from({ length: totalSeatSlots }, (_, index) => index)
+      .filter((index) => !disabledDesks.has(Math.floor(index / seatsPerDesk)) && base[index] === null)
+      .sort((first, second) => {
+        const firstDesk = Math.floor(first / seatsPerDesk)
+        const secondDesk = Math.floor(second / seatsPerDesk)
+        const rowDifference = Math.floor(secondDesk / deskColumns) - Math.floor(firstDesk / deskColumns)
+        return rowDifference || firstDesk - secondDesk || first - second
+      })
     let candidate = base
     let found = false
     for (let attempt = 0; attempt < 2500; attempt += 1) {
@@ -217,6 +228,17 @@ function App() {
       next.has(studentId) ? next.delete(studentId) : next.add(studentId)
       return next
     })
+  }
+
+  function toggleDesk(deskIndex: number) {
+    setDisabledDesks((current) => {
+      const next = new Set(current)
+      next.has(deskIndex) ? next.delete(deskIndex) : next.add(deskIndex)
+      return next
+    })
+    setAssignments([])
+    setLockedStudents(new Set())
+    setPlannerError('')
   }
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
@@ -417,7 +439,8 @@ function App() {
           <aside className="planner-controls">
             <div><span className="eyebrow">1. Klassiruum</span><h2>Lauad ja kohad</h2></div>
             <div className="option-grid"><button className={deskType === 'pair' ? 'active' : ''} onClick={() => { setDeskType('pair'); setAssignments([]) }}><strong>▭ Paarislauad</strong><span>Kaks õpilast laua kohta</span></button><button className={deskType === 'single' ? 'active' : ''} onClick={() => { setDeskType('single'); setAssignments([]) }}><strong>□ Üksikud lauad</strong><span>Üks õpilane laua kohta</span></button></div>
-            <div className="number-fields"><label>Ridu<input type="number" min="1" max="10" value={deskRows} onChange={(event) => { setDeskRows(Math.max(1, Number(event.target.value))); setAssignments([]) }} /></label><label>Veerge<input type="number" min="1" max="10" value={deskColumns} onChange={(event) => { setDeskColumns(Math.max(1, Number(event.target.value))); setAssignments([]) }} /></label><div><span>Kohti</span><strong className={seatCount < plannerStudents.length ? 'capacity-bad' : ''}>{seatCount}</strong></div></div>
+            <div className="number-fields"><label>Ridu<input type="number" min="1" max="10" value={deskRows} onChange={(event) => { setDeskRows(Math.max(1, Number(event.target.value))); setDisabledDesks(new Set()); setAssignments([]) }} /></label><label>Veerge<input type="number" min="1" max="10" value={deskColumns} onChange={(event) => { setDeskColumns(Math.max(1, Number(event.target.value))); setDisabledDesks(new Set()); setAssignments([]) }} /></label><div><span>Kohti</span><strong className={seatCount < plannerStudents.length ? 'capacity-bad' : ''}>{seatCount}</strong></div></div>
+            <p className="control-help">Üleliigse laua eemaldamiseks vajuta eelvaates laua nurgas ×. Eemaldatud laua saad samast kohast taastada.</p>
 
             <div className="control-divider" />
             <div><span className="eyebrow">2. Loosimine</span><h2>Vali meetod</h2></div>
@@ -428,27 +451,31 @@ function App() {
             <div className="rule-picker"><select value={ruleFirst} onChange={(event) => setRuleFirst(event.target.value)}><option value="">Vali esimene…</option>{plannerStudents.map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><select value={ruleSecond} onChange={(event) => setRuleSecond(event.target.value)}><option value="">Vali teine…</option>{plannerStudents.filter((student) => student.id !== ruleFirst).map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><button type="button" onClick={addSeparationRule}>+ Lisa</button></div>
             {separationRules.length > 0 && <div className="rule-list">{separationRules.map((rule, index) => <div key={`${rule.firstId}-${rule.secondId}`}><span>{studentById.get(rule.firstId)?.first_name} ↔ {studentById.get(rule.secondId)?.first_name}</span><button onClick={() => setSeparationRules((current) => current.filter((_, ruleIndex) => ruleIndex !== index))}>×</button></div>)}</div>}
             {plannerError && <div className="notice notice--error" role="alert">{plannerError}</div>}
-            <button className="button button--wide draw-button" onClick={() => generatePlan(drawMode === 'guided' && assignments.length === seatCount)}>{assignments.length === seatCount ? drawMode === 'guided' ? '🎲 Loosi lukustamata kohad' : '🎲 Loosi uuesti' : '🎲 Loo isteplaan'}</button>
+            <button className="button button--wide draw-button" onClick={() => generatePlan(drawMode === 'guided' && planGenerated)}>{planGenerated ? drawMode === 'guided' ? '🎲 Loosi lukustamata kohad' : '🎲 Loosi uuesti' : '🎲 Loo isteplaan'}</button>
           </aside>
 
           <section className="planner-preview">
-            <div className="preview-heading"><div><span className="eyebrow">Eelvaade</span><h1>{plannerClass.name}</h1></div>{drawMode === 'guided' && assignments.length === seatCount && <p>↕ Lohista nimed ümber ja lukusta need, kelle koht peab säilima.</p>}</div>
+            <div className="preview-heading"><div><span className="eyebrow">Eelvaade</span><h1>{plannerClass.name}</h1></div>{drawMode === 'guided' && planGenerated && <p>↕ Lohista nimed ümber ja lukusta need, kelle koht peab säilima. Tahvlipoolsed kohad täidetakse esimesena.</p>}</div>
             <div className="classroom-canvas">
-              {assignments.length === seatCount ? <div className="desk-grid" style={{ gridTemplateColumns: `repeat(${deskColumns}, minmax(110px, 1fr))` }}>
-                {Array.from({ length: deskRows * deskColumns }, (_, deskIndex) => <div className={`desk desk--${deskType}`} key={deskIndex}>
-                  {Array.from({ length: seatsPerDesk }, (_, position) => {
-                    const seatIndex = deskIndex * seatsPerDesk + position
-                    const studentId = assignments[seatIndex]
-                    const student = studentId ? studentById.get(studentId) : null
-                    return <div className={`seat ${studentId && lockedStudents.has(studentId) ? 'seat--locked' : ''}`} key={seatIndex} draggable={Boolean(student) && drawMode === 'guided'} onDragStart={() => setDraggedSeat(seatIndex)} onDragOver={(event) => drawMode === 'guided' && event.preventDefault()} onDrop={() => { if (draggedSeat !== null && draggedSeat !== seatIndex) moveStudent(draggedSeat, seatIndex); setDraggedSeat(null) }}>
-                      {student && <><span>{student.first_name}<small>{student.last_name}</small></span>{drawMode === 'guided' && <button title={lockedStudents.has(student.id) ? 'Vabasta koht' : 'Lukusta koht'} onClick={() => toggleStudentLock(student.id)}>{lockedStudents.has(student.id) ? '🔒' : '○'}</button>}</>}
-                    </div>
-                  })}
-                </div>)}
-              </div> : <div className="preview-empty"><span>▦</span><h3>Seadista klassiruum</h3><p>Vali vasakul lauad ja vajuta „Loo isteplaan“.</p></div>}
+              <div className="desk-grid" style={{ gridTemplateColumns: `repeat(${deskColumns}, minmax(110px, 1fr))` }}>
+                {Array.from({ length: totalDeskCount }, (_, deskIndex) => disabledDesks.has(deskIndex)
+                  ? <button className="desk-placeholder" key={deskIndex} onClick={() => toggleDesk(deskIndex)} title="Taasta laud"><span>+ Taasta laud</span></button>
+                  : <div className={`desk desk--${deskType}`} key={deskIndex}>
+                    <button className="desk-remove" onClick={() => toggleDesk(deskIndex)} title="Eemalda laud" aria-label={`Eemalda laud ${deskIndex + 1}`}>×</button>
+                    {Array.from({ length: seatsPerDesk }, (_, position) => {
+                      const seatIndex = deskIndex * seatsPerDesk + position
+                      const studentId = assignments[seatIndex]
+                      const student = studentId ? studentById.get(studentId) : null
+                      return <div className={`seat ${studentId && lockedStudents.has(studentId) ? 'seat--locked' : ''}`} key={seatIndex} draggable={Boolean(student) && drawMode === 'guided'} onDragStart={() => setDraggedSeat(seatIndex)} onDragOver={(event) => drawMode === 'guided' && event.preventDefault()} onDrop={() => { if (draggedSeat !== null && draggedSeat !== seatIndex) moveStudent(draggedSeat, seatIndex); setDraggedSeat(null) }}>
+                        {student && <><span>{student.first_name}<small>{student.last_name}</small></span>{drawMode === 'guided' && <button title={lockedStudents.has(student.id) ? 'Vabasta koht' : 'Lukusta koht'} onClick={() => toggleStudentLock(student.id)}>{lockedStudents.has(student.id) ? '🔒' : '○'}</button>}</>}
+                      </div>
+                    })}
+                  </div>)}
+              </div>
+              {!planGenerated && <p className="canvas-hint">Eemalda vajaduse korral üleliigsed lauad ja vajuta seejärel „Loo isteplaan“.</p>}
               <div className="class-board"><span>TAHVEL</span></div>
             </div>
-            {assignments.length === seatCount && <div className="preview-actions"><button className="button button--ghost" onClick={() => { setAssignments([]); setLockedStudents(new Set()) }}>Alusta uuesti</button><button className="button" disabled>Jätka klassivaatesse →</button></div>}
+            {planGenerated && <div className="preview-actions"><button className="button button--ghost" onClick={() => { setAssignments([]); setLockedStudents(new Set()) }}>Alusta uuesti</button><button className="button" disabled>Jätka klassivaatesse →</button></div>}
           </section>
         </main>
       </div>}
