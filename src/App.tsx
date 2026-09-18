@@ -243,6 +243,26 @@ function App() {
     setDashboardNotice(`Isteplaan „${saved.name}“ on salvestatud.`)
   }
 
+  async function copyPlan(plan: SeatingPlan) {
+    if (!supabase || !session) return
+    setDashboardError('')
+    const result = await supabase.from('seating_plans').insert({
+      teacher_id: session.user.id, class_id: plan.class_id, name: `${plan.name} (koopia)`, rows: plan.rows, cols: plan.cols,
+      seat_type: plan.seat_type, mode: plan.mode, seats: plan.seats, avoid_pairs: plan.avoid_pairs,
+    }).select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, updated_at').single()
+    if (result.error || !result.data) { setDashboardError('Plaani kopeerimine ei õnnestunud.'); return }
+    setSavedPlans((current) => [result.data as SeatingPlan, ...current])
+    setDashboardNotice(`Loodud plaani „${plan.name}“ koopia.`)
+  }
+
+  async function deletePlan(plan: SeatingPlan) {
+    if (!supabase || !window.confirm(`Kas kustutada isteplaan „${plan.name}“?`)) return
+    const result = await supabase.from('seating_plans').delete().eq('id', plan.id)
+    if (result.error) { setDashboardError('Plaani kustutamine ei õnnestunud.'); return }
+    setSavedPlans((current) => current.filter((item) => item.id !== plan.id))
+    setDashboardNotice(`Isteplaan „${plan.name}“ on kustutatud.`)
+  }
+
   function startPresentation() {
     if (!planGenerated) return
     setPresentationMode(true); setRevealCount(0); setAnimationTick(0); setDrawing(false)
@@ -501,7 +521,7 @@ function App() {
       {selectedClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedClass(null)}><section className="modal roster-modal" role="dialog" aria-modal="true" aria-labelledby="roster-title">
         <div className="modal-header"><div><span className="eyebrow">{selectedClass.academic_year}</span><h2 id="roster-title">{selectedClass.name}</h2><p>{selectedStudents.length} õpilast</p></div><button className="icon-button" onClick={() => setSelectedClass(null)} aria-label="Sulge">×</button></div>
         {selectedStudents.length ? <ol className="student-list">{selectedStudents.map((student) => <li key={student.id}><span>{student.first_name} {student.last_name}</span></li>)}</ol> : <div className="mini-empty">Selles klassis pole veel õpilasi.</div>}
-        {savedPlans.some((plan) => plan.class_id === selectedClass.id) && <div className="saved-plan-list"><strong>Minu salvestatud plaanid</strong>{savedPlans.filter((plan) => plan.class_id === selectedClass.id).map((plan) => <div key={plan.id}><span><b>{plan.name}</b><small>Muudetud {new Date(plan.updated_at).toLocaleDateString('et-EE')}</small></span><button onClick={() => openSavedPlan(plan)}>Muuda</button><button onClick={() => openSavedPlan(plan, true)}>Klassivaade</button></div>)}</div>}
+        {savedPlans.some((plan) => plan.class_id === selectedClass.id) && <div className="saved-plan-list"><strong>Minu salvestatud plaanid</strong>{savedPlans.filter((plan) => plan.class_id === selectedClass.id).map((plan) => <div key={plan.id}><span><b>{plan.name}</b><small>Muudetud {new Date(plan.updated_at).toLocaleDateString('et-EE')}</small></span><button onClick={() => openSavedPlan(plan)}>Muuda</button><button onClick={() => openSavedPlan(plan, true)}>Klassivaade</button><button onClick={() => copyPlan(plan)}>Kopeeri</button><button className="danger-action" onClick={() => deletePlan(plan)}>Kustuta</button></div>)}</div>}
         <div className="modal-actions">{profile?.role === 'admin' && <button className="button button--ghost button--edit" onClick={() => openClassEditor(selectedClass)}>Muuda klassi</button>}<button className="button button--ghost" onClick={() => setSelectedClass(null)}>Sulge</button><button className="button" onClick={() => openPlanner(selectedClass)}>Koosta isteplaan →</button></div>
       </section></div>}
 
@@ -571,7 +591,7 @@ function App() {
           </div>
           <div className="presentation-board">TAHVEL</div>
         </main>
-        <footer>{revealCount < revealOrder.length ? <button className="draw-start" onClick={beginDraw} disabled={drawing}>{drawing ? 'LOOSIMINE KÄIB…' : '🎲 LOOSI UUED KOHAD'}</button> : <><span>Kohad on loositud!</span><button className="button button--ghost" onClick={beginDraw}>Loosi uuesti</button></>}</footer>
+        <footer>{revealCount < revealOrder.length ? <button className="draw-start" onClick={beginDraw} disabled={drawing}>{drawing ? 'LOOSIMINE KÄIB…' : '🎲 LOOSI UUED KOHAD'}</button> : <><span>Kohad on loositud!</span><button className="button button--ghost" onClick={beginDraw}>Loosi uuesti</button><button className="button" onClick={() => window.print()}>↓ Ekspordi PDF</button></>}</footer>
       </div>}
 
       {editingClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setEditingClass(null)}><section className="modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="edit-class-title">
