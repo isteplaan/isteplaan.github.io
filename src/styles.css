@@ -78,6 +78,12 @@ input:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, .12
 .placeholder-grid p { color: #6d7b73; line-height: 1.55; }
 
 .dashboard-notice { margin: 20px 0 -4px; }
+.dashboard-view-tabs { width: fit-content; display: flex; gap: 5px; margin: 18px auto 14px; padding: 5px; border: 1px solid #dbe5dd; border-radius: 13px; background: #eaf1ec; }
+.dashboard-view-tabs button { padding: 10px 16px; border: 0; border-radius: 9px; background: transparent; color: #52645a; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
+.dashboard-view-tabs button.active { background: #fff; color: #174a3a; box-shadow: 0 3px 10px rgba(23,56,47,.09); }
+.dashboard-view-tabs span { margin-left: 4px; color: #8a978f; }
+.teaching-groups-section .section-heading > div > p { margin: 5px 0 0; color: #728078; font-size: 13px; }
+.teaching-group-card .class-icon { background: #e8f0eb; color: #27634f; }
 .class-section { margin-top: 30px; padding: 34px; border: 1px solid #dee7e0; border-radius: 22px; background: #fff; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
 .section-heading h2 { font-size: 30px; }
@@ -125,6 +131,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .student-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 30px; margin: 0; padding: 4px 0 4px 28px; counter-reset: roster; }
 .student-list li { padding: 10px 4px; border-bottom: 1px solid #edf1ee; color: #617168; }
 .student-list li span { color: #17382f; font-weight: 600; }
+.student-list li small { float: right; color: #829088; font-size: 11px; font-weight: 800; }
 .mini-empty { padding: 40px 20px; border-radius: 14px; background: #f3f6f3; color: #718078; text-align: center; }
 .coming-soon { margin: 10px 0 0; color: #89958e; font-size: 12px; text-align: right; }
 .import-guide { display: grid; grid-template-columns: 1.3fr repeat(3, 1fr); overflow: hidden; border: 1px solid #dce6df; border-radius: 11px; font-size: 12px; }
@@ -150,6 +157,18 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .member-row input { padding: 10px 11px; }
 .member-row button { width: 32px; height: 32px; border: 0; border-radius: 9px; background: #f8e9e7; color: #9a3d35; font-size: 20px; cursor: pointer; }
 .small-modal { width: min(470px, 100%); }
+.teaching-group-modal { width: min(860px, 100%); }
+.teaching-group-builder { display: grid; grid-template-columns: 230px 1fr; gap: 14px; margin-top: 16px; }
+.teaching-group-builder > div { min-width: 0; display: grid; align-content: start; gap: 9px; padding: 13px; border: 1px solid #dce6df; border-radius: 12px; background: #f8faf8; }
+.teaching-group-builder > div > strong { color: #285f4d; font-size: 13px; }
+.class-checkboxes { max-height: 310px; overflow: auto; display: grid; gap: 3px; }
+.class-checkboxes label, .teaching-student-picker label { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; cursor: pointer; }
+.class-checkboxes label:hover, .teaching-student-picker label:hover { background: #eaf2ed; }
+.class-checkboxes input, .teaching-student-picker input { width: auto; }
+.teaching-student-picker { max-height: 320px; overflow: auto; display: grid; gap: 2px; }
+.teaching-student-picker label span { min-width: 0; flex: 1; }
+.teaching-student-picker label small { color: #7c8982; font-weight: 800; }
+.teaching-student-picker > p { color: #7c8982; text-align: center; }
 .help-modal { width: min(680px, 100%); }
 .help-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; padding: 5px; border-radius: 13px; background: #edf3ef; }
 .help-tabs button { padding: 11px 12px; border: 0; border-radius: 9px; background: transparent; color: #52645a; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
@@ -358,6 +377,9 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 }
 
 @media (max-width: 800px) {
+  .dashboard-view-tabs { width: 100%; }
+  .dashboard-view-tabs button { flex: 1; }
+  .teaching-group-builder { grid-template-columns: 1fr; }
   .option-grid--three { grid-template-columns: 1fr; }
   .help-tabs { grid-template-columns: 1fr; }
   .login-page { padding: 0; place-items: stretch; }

@@ -10,6 +10,9 @@ const classNameCollator = new Intl.Collator('et', { numeric: true, sensitivity: 
 type Profile = { display_name: string | null; role: 'teacher' | 'admin' }
 type SchoolClass = { id: string; name: string; academic_year: string; archived: boolean }
 type Student = { id: string; class_id: string; first_name: string; last_name: string }
+type TeachingGroup = { id: string; teacher_id: string; name: string; updated_at: string }
+type TeachingGroupMember = { group_id: string; student_id: string }
+type DashboardView = 'classes' | 'teaching-groups'
 type EditableStudent = { id?: string; first_name: string; last_name: string }
 type ViewFilter = 'favorites' | 'all'
 type AdminMode = 'single' | 'import'
@@ -18,7 +21,7 @@ type DrawMode = 'random' | 'guided'
 type ActivityType = 'seating' | 'groups'
 type SeparationRule = { firstId: string; secondId: string; setId?: string }
 type StoredSeat = { student_id: string | null; disabled?: boolean; group?: number; solo?: boolean; desk_size?: number }
-type SeatingPlan = { id: string; class_id: string; name: string; rows: number; cols: number; seat_type: DeskType; mode: DrawMode; seats: StoredSeat[]; avoid_pairs: SeparationRule[]; activity_type: ActivityType; group_size: number | null; absent_students: string[]; updated_at: string }
+type SeatingPlan = { id: string; class_id: string | null; teaching_group_id: string | null; name: string; rows: number; cols: number; seat_type: DeskType; mode: DrawMode; seats: StoredSeat[]; avoid_pairs: SeparationRule[]; activity_type: ActivityType; group_size: number | null; absent_students: string[]; updated_at: string }
 type AdminUser = { user_id: string; email: string; display_name: string | null; role: 'teacher' | 'admin'; active: boolean; joined_at: string; last_seen_at: string | null; favorite_classes: string[]; saved_classes: string[]; plan_count: number }
 
 function shuffle<T>(items: T[]) {
@@ -125,6 +128,17 @@ function App() {
   const [students, setStudents] = useState<Student[]>([])
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
   const [savedPlans, setSavedPlans] = useState<SeatingPlan[]>([])
+  const [teachingGroups, setTeachingGroups] = useState<TeachingGroup[]>([])
+  const [teachingGroupMembers, setTeachingGroupMembers] = useState<TeachingGroupMember[]>([])
+  const [dashboardView, setDashboardView] = useState<DashboardView>('classes')
+  const [selectedTeachingGroup, setSelectedTeachingGroup] = useState<TeachingGroup | null>(null)
+  const [showTeachingGroupForm, setShowTeachingGroupForm] = useState(false)
+  const [editingTeachingGroup, setEditingTeachingGroup] = useState<TeachingGroup | null>(null)
+  const [teachingGroupName, setTeachingGroupName] = useState('')
+  const [teachingGroupClassIds, setTeachingGroupClassIds] = useState<Set<string>>(new Set())
+  const [teachingGroupStudentIds, setTeachingGroupStudentIds] = useState<Set<string>>(new Set())
+  const [teachingGroupSearch, setTeachingGroupSearch] = useState('')
+  const [savingTeachingGroup, setSavingTeachingGroup] = useState(false)
   const [viewFilter, setViewFilter] = useState<ViewFilter>('favorites')
   const [search, setSearch] = useState('')
   const [selectedClass, setSelectedClass] = useState<SchoolClass | null>(null)
@@ -136,6 +150,7 @@ function App() {
   const [editError, setEditError] = useState('')
   const [savingEdits, setSavingEdits] = useState(false)
   const [plannerClass, setPlannerClass] = useState<SchoolClass | null>(null)
+  const [plannerTeachingGroup, setPlannerTeachingGroup] = useState<TeachingGroup | null>(null)
   const [deskType, setDeskType] = useState<DeskType>('pair')
   const [deskRows, setDeskRows] = useState(4)
   const [deskColumns, setDeskColumns] = useState(3)
@@ -198,24 +213,28 @@ function App() {
 
   useEffect(() => {
     if (!supabase || !session?.user.id) {
-      setProfile(null); setClasses([]); setStudents([]); setFavoriteIds(new Set()); setSavedPlans([]); return
+      setProfile(null); setClasses([]); setStudents([]); setFavoriteIds(new Set()); setSavedPlans([]); setTeachingGroups([]); setTeachingGroupMembers([]); return
     }
     async function loadDashboard() {
       if (!supabase || !session) return
       setDataLoading(true); setDashboardError('')
-      const [profileResult, classesResult, studentsResult, favoritesResult, plansResult] = await Promise.all([
+      const [profileResult, classesResult, studentsResult, favoritesResult, plansResult, groupsResult, groupMembersResult] = await Promise.all([
         supabase.from('profiles').select('display_name, role').eq('id', session.user.id).single(),
         supabase.from('school_classes').select('id, name, academic_year, archived').order('name'),
         supabase.from('students').select('id, class_id, first_name, last_name').eq('active', true).order('last_name'),
         supabase.from('teacher_favorite_classes').select('class_id').eq('teacher_id', session.user.id),
-        supabase.from('seating_plans').select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').eq('teacher_id', session.user.id).order('updated_at', { ascending: false }),
+        supabase.from('seating_plans').select('id, class_id, teaching_group_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').eq('teacher_id', session.user.id).order('updated_at', { ascending: false }),
+        supabase.from('teaching_groups').select('id, teacher_id, name, updated_at').eq('teacher_id', session.user.id).order('name'),
+        supabase.from('teaching_group_students').select('group_id, student_id'),
       ])
-      if (profileResult.error || classesResult.error || studentsResult.error || favoritesResult.error || plansResult.error) setDashboardError('Andmeid ei õnnestunud laadida. Värskenda lehte või proovi uuesti.')
+      if (profileResult.error || classesResult.error || studentsResult.error || favoritesResult.error || plansResult.error || groupsResult.error || groupMembersResult.error) setDashboardError('Andmeid ei õnnestunud laadida. Värskenda lehte või proovi uuesti.')
       setProfile(profileResult.data as Profile | null)
       setClasses((classesResult.data || []) as SchoolClass[])
       setStudents((studentsResult.data || []) as Student[])
       setFavoriteIds(new Set((favoritesResult.data || []).map((favorite) => favorite.class_id)))
       setSavedPlans((plansResult.data || []) as SeatingPlan[])
+      setTeachingGroups((groupsResult.data || []) as TeachingGroup[])
+      setTeachingGroupMembers((groupMembersResult.data || []) as TeachingGroupMember[])
       setDataLoading(false)
     }
     loadDashboard()
@@ -244,8 +263,15 @@ function App() {
   }, [adminUsers, userSearch])
 
   const selectedStudents = useMemo(() => selectedClass ? students.filter((student) => student.class_id === selectedClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et')) : [], [selectedClass, students])
+  const selectedTeachingGroupStudents = useMemo(() => selectedTeachingGroup ? students.filter((student) => teachingGroupMembers.some((member) => member.group_id === selectedTeachingGroup.id && member.student_id === student.id)).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et')) : [], [selectedTeachingGroup, students, teachingGroupMembers])
+  const teachingGroupCandidateStudents = useMemo(() => {
+    const query = teachingGroupSearch.trim().toLocaleLowerCase('et')
+    return students.filter((student) => teachingGroupClassIds.has(student.class_id) && (!query || `${student.first_name} ${student.last_name}`.toLocaleLowerCase('et').includes(query))).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et'))
+  }, [students, teachingGroupClassIds, teachingGroupSearch])
 
-  const plannerStudents = useMemo(() => plannerClass ? students.filter((student) => student.class_id === plannerClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et')) : [], [plannerClass, students])
+  const plannerStudents = useMemo(() => plannerTeachingGroup
+    ? students.filter((student) => teachingGroupMembers.some((member) => member.group_id === plannerTeachingGroup.id && member.student_id === student.id)).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et'))
+    : plannerClass ? students.filter((student) => student.class_id === plannerClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et')) : [], [plannerClass, plannerTeachingGroup, students, teachingGroupMembers])
   const filteredAbsenceStudents = useMemo(() => {
     const query = absenceSearch.trim().toLocaleLowerCase('et')
     return plannerStudents.filter((student) => !query || `${student.first_name} ${student.last_name}`.toLocaleLowerCase('et').includes(query))
@@ -300,9 +326,17 @@ function App() {
 
   function openPlanner(schoolClass: SchoolClass) {
     setSelectedClass(null)
+    setSelectedTeachingGroup(null); setPlannerTeachingGroup(null)
     setPlannerClass(schoolClass)
     setDeskType('pair'); setDeskRows(4); setDeskColumns(3); setDisabledDesks(new Set()); setDeskCapacities(Array(12).fill(2)); setDrawMode('guided'); setActivityType('seating'); setGroupSize(4); setGroups([]); setGroupRuleSelection(new Set()); setGroupRuleSearch(''); setDraggedGroupMember(null); setAbsentStudentIds(new Set()); setAbsenceSearch(''); setSoloStudentIds(new Set()); setSoloSearch('')
     setAssignments([]); setLockedStudents(new Set()); setSeparationRules([]); setRuleFirst(''); setRuleSecond(''); setPlannerError(''); setEditingPlanId(null); setPlanName(`${schoolClass.name} isteplaan`)
+  }
+
+  function openTeachingGroupPlanner(group: TeachingGroup) {
+    setSelectedTeachingGroup(null); setSelectedClass(null); setPlannerTeachingGroup(group)
+    setPlannerClass({ id: group.id, name: group.name, academic_year: 'Õpperühm', archived: false })
+    setDeskType('pair'); setDeskRows(4); setDeskColumns(3); setDisabledDesks(new Set()); setDeskCapacities(Array(12).fill(2)); setDrawMode('guided'); setActivityType('seating'); setGroupSize(4); setGroups([]); setAbsentStudentIds(new Set())
+    setAssignments([]); setLockedStudents(new Set()); setSeparationRules([]); setRuleFirst(''); setRuleSecond(''); setPlannerError(''); setEditingPlanId(null); setPlanName(`${group.name} isteplaan`)
   }
 
   function openSavedPlan(plan: SeatingPlan, showPresentation = false) {
@@ -313,12 +347,13 @@ function App() {
   }
 
   function applySavedPlan(plan: SeatingPlan, showPresentation = false, absences = new Set<string>()) {
-    const schoolClass = classes.find((item) => item.id === plan.class_id)
+    const teachingGroup = plan.teaching_group_id ? teachingGroups.find((item) => item.id === plan.teaching_group_id) || null : null
+    const schoolClass = teachingGroup ? { id: teachingGroup.id, name: teachingGroup.name, academic_year: 'Õpperühm', archived: false } : classes.find((item) => item.id === plan.class_id)
     if (!schoolClass) return
     const seatMultiplier = plan.seat_type === 'mixed' ? 3 : plan.seat_type === 'pair' ? 2 : 1
     const nextActivity = plan.activity_type || 'seating'
     const loadedDeskCapacities = Array.from({ length: plan.rows * plan.cols }, (_, deskIndex) => plan.seat_type === 'mixed' ? Math.max(1, Math.min(3, plan.seats[deskIndex * 3]?.desk_size || 2)) : seatMultiplier)
-    setSelectedClass(null); setPlannerClass(schoolClass); setDeskRows(plan.rows); setDeskColumns(plan.cols); setDeskType(plan.seat_type); setDrawMode(plan.mode); setActivityType(nextActivity); setGroupSize(plan.group_size || 4); setAbsentStudentIds(absences)
+    setSelectedClass(null); setSelectedTeachingGroup(null); setPlannerTeachingGroup(teachingGroup); setPlannerClass(schoolClass); setDeskRows(plan.rows); setDeskColumns(plan.cols); setDeskType(plan.seat_type); setDrawMode(plan.mode); setActivityType(nextActivity); setGroupSize(plan.group_size || 4); setAbsentStudentIds(absences)
     setDeskCapacities(loadedDeskCapacities)
     if (nextActivity === 'seating') {
       const loadedAssignments = plan.seats.map((seat) => seat.student_id || null)
@@ -329,7 +364,8 @@ function App() {
       setSoloStudentIds(new Set(plan.seats.filter((seat) => seat.student_id && seat.solo).map((seat) => seat.student_id as string)))
     } else setAssignments([])
     if (nextActivity === 'groups') {
-      const presentIds = students.filter((student) => student.class_id === plan.class_id && !absences.has(student.id)).map((student) => student.id)
+      const scopeStudentIds = teachingGroup ? new Set(teachingGroupMembers.filter((member) => member.group_id === teachingGroup.id).map((member) => member.student_id)) : null
+      const presentIds = students.filter((student) => (scopeStudentIds ? scopeStudentIds.has(student.id) : student.class_id === plan.class_id) && !absences.has(student.id)).map((student) => student.id)
       const savedGroups = plan.seats.reduce<string[][]>((result, seat) => {
         if (!seat.student_id || absences.has(seat.student_id)) return result
         const groupIndex = seat.group ?? 0
@@ -353,14 +389,14 @@ function App() {
     if (!planName.trim()) { setPlannerError('Pane isteplaanile nimi.'); return }
     setSavingPlan(true); setPlannerError('')
     const payload = {
-      teacher_id: session.user.id, class_id: plannerClass.id, name: planName.trim(), rows: deskRows, cols: deskColumns,
+      teacher_id: session.user.id, class_id: plannerTeachingGroup ? null : plannerClass.id, teaching_group_id: plannerTeachingGroup?.id || null, name: planName.trim(), rows: deskRows, cols: deskColumns,
       seat_type: deskType, mode: drawMode, activity_type: activityType, group_size: activityType === 'groups' ? groupSize : null,
       seats: activityType === 'groups' ? groups.flatMap((group, groupIndex) => group.map((studentId) => ({ student_id: studentId, group: groupIndex }))) : assignments.map((studentId, index) => ({ student_id: studentId, disabled: disabledDesks.has(Math.floor(index / seatsPerDesk)), solo: Boolean(studentId && soloStudentIds.has(studentId)), desk_size: capacityForDesk(Math.floor(index / seatsPerDesk)) })),
       avoid_pairs: separationRules, absent_students: [...absentStudentIds],
     }
     const result = editingPlanId
-      ? await supabase.from('seating_plans').update(payload).eq('id', editingPlanId).select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').single()
-      : await supabase.from('seating_plans').insert(payload).select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').single()
+      ? await supabase.from('seating_plans').update(payload).eq('id', editingPlanId).select('id, class_id, teaching_group_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').single()
+      : await supabase.from('seating_plans').insert(payload).select('id, class_id, teaching_group_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').single()
     setSavingPlan(false)
     if (result.error || !result.data) { setPlannerError('Isteplaani salvestamine ei õnnestunud. Proovi uuesti.'); return }
     const saved = result.data as SeatingPlan
@@ -373,9 +409,9 @@ function App() {
     if (!supabase || !session) return
     setDashboardError('')
     const result = await supabase.from('seating_plans').insert({
-      teacher_id: session.user.id, class_id: plan.class_id, name: `${plan.name} (koopia)`, rows: plan.rows, cols: plan.cols,
+      teacher_id: session.user.id, class_id: plan.class_id, teaching_group_id: plan.teaching_group_id, name: `${plan.name} (koopia)`, rows: plan.rows, cols: plan.cols,
       seat_type: plan.seat_type, mode: plan.mode, seats: plan.seats, avoid_pairs: plan.avoid_pairs, activity_type: plan.activity_type, group_size: plan.group_size, absent_students: plan.absent_students,
-    }).select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').single()
+    }).select('id, class_id, teaching_group_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').single()
     if (result.error || !result.data) { setDashboardError('Plaani kopeerimine ei õnnestunud.'); return }
     setSavedPlans((current) => [result.data as SeatingPlan, ...current])
     setDashboardNotice(`Loodud plaani „${plan.name}“ koopia.`)
@@ -544,6 +580,59 @@ function App() {
       return next
     })
     setAssignments([]); setLockedStudents(new Set()); setPlannerError('')
+  }
+
+  function openTeachingGroupEditor(group?: TeachingGroup) {
+    const memberIds = new Set(group ? teachingGroupMembers.filter((member) => member.group_id === group.id).map((member) => member.student_id) : [])
+    setSelectedTeachingGroup(null); setEditingTeachingGroup(group || null); setTeachingGroupName(group?.name || ''); setTeachingGroupStudentIds(memberIds)
+    setTeachingGroupClassIds(new Set(students.filter((student) => memberIds.has(student.id)).map((student) => student.class_id)))
+    setTeachingGroupSearch(''); setDashboardError(''); setShowTeachingGroupForm(true)
+  }
+
+  function toggleTeachingGroupClass(classId: string) {
+    setTeachingGroupClassIds((current) => {
+      const next = new Set(current)
+      if (next.has(classId)) {
+        next.delete(classId)
+        const removedStudentIds = new Set(students.filter((student) => student.class_id === classId).map((student) => student.id))
+        setTeachingGroupStudentIds((selected) => new Set([...selected].filter((id) => !removedStudentIds.has(id))))
+      } else next.add(classId)
+      return next
+    })
+  }
+
+  async function saveTeachingGroup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase || !session || !teachingGroupName.trim()) return
+    if (!teachingGroupStudentIds.size) { setDashboardError('Vali õpperühma vähemalt üks õpilane.'); return }
+    setSavingTeachingGroup(true); setDashboardError('')
+    let group = editingTeachingGroup
+    if (group) {
+      const updated = await supabase.from('teaching_groups').update({ name: teachingGroupName.trim(), updated_at: new Date().toISOString() }).eq('id', group.id).select('id, teacher_id, name, updated_at').single()
+      if (updated.error || !updated.data) { setSavingTeachingGroup(false); setDashboardError('Õpperühma muutmine ei õnnestunud.'); return }
+      group = updated.data as TeachingGroup
+      const removed = await supabase.from('teaching_group_students').delete().eq('group_id', group.id)
+      if (removed.error) { setSavingTeachingGroup(false); setDashboardError('Õpperühma liikmete uuendamine ei õnnestunud.'); return }
+    } else {
+      const created = await supabase.from('teaching_groups').insert({ teacher_id: session.user.id, name: teachingGroupName.trim() }).select('id, teacher_id, name, updated_at').single()
+      if (created.error || !created.data) { setSavingTeachingGroup(false); setDashboardError('Õpperühma loomine ei õnnestunud.'); return }
+      group = created.data as TeachingGroup
+    }
+    const members = [...teachingGroupStudentIds].map((studentId) => ({ group_id: group!.id, student_id: studentId }))
+    const memberResult = await supabase.from('teaching_group_students').insert(members).select('group_id, student_id')
+    setSavingTeachingGroup(false)
+    if (memberResult.error) { setDashboardError('Õpperühma liikmete salvestamine ei õnnestunud.'); return }
+    setTeachingGroups((current) => [...current.filter((item) => item.id !== group!.id), group!].sort((a, b) => classNameCollator.compare(a.name, b.name)))
+    setTeachingGroupMembers((current) => [...current.filter((member) => member.group_id !== group!.id), ...((memberResult.data || []) as TeachingGroupMember[])])
+    setShowTeachingGroupForm(false); setEditingTeachingGroup(null); setDashboardNotice(`Õpperühm „${group.name}“ on salvestatud.`)
+  }
+
+  async function deleteTeachingGroup(group: TeachingGroup) {
+    if (!supabase || !window.confirm(`Kas kustutada õpperühm „${group.name}“ ja selle salvestatud plaanid?`)) return
+    const result = await supabase.from('teaching_groups').delete().eq('id', group.id)
+    if (result.error) { setDashboardError('Õpperühma kustutamine ei õnnestunud.'); return }
+    setTeachingGroups((current) => current.filter((item) => item.id !== group.id)); setTeachingGroupMembers((current) => current.filter((member) => member.group_id !== group.id)); setSavedPlans((current) => current.filter((plan) => plan.teaching_group_id !== group.id)); setSelectedTeachingGroup(null)
+    setDashboardNotice(`Õpperühm „${group.name}“ on kustutatud.`)
   }
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
@@ -732,10 +821,10 @@ function App() {
     if (!supabase || !session || !plannerClass || !resultGenerated) return
     setSavingPlan(true); setPlannerError('')
     const result = await supabase.from('seating_plans').insert({
-      teacher_id: session.user.id, class_id: plannerClass.id, name: `${planName.trim() || plannerClass.name} (koopia)`, rows: deskRows, cols: deskColumns,
+      teacher_id: session.user.id, class_id: plannerTeachingGroup ? null : plannerClass.id, teaching_group_id: plannerTeachingGroup?.id || null, name: `${planName.trim() || plannerClass.name} (koopia)`, rows: deskRows, cols: deskColumns,
       seat_type: deskType, mode: drawMode, activity_type: activityType, group_size: activityType === 'groups' ? groupSize : null,
       seats: activityType === 'groups' ? groups.flatMap((group, groupIndex) => group.map((studentId) => ({ student_id: studentId, group: groupIndex }))) : assignments.map((studentId, index) => ({ student_id: studentId, disabled: disabledDesks.has(Math.floor(index / seatsPerDesk)), solo: Boolean(studentId && soloStudentIds.has(studentId)), desk_size: capacityForDesk(Math.floor(index / seatsPerDesk)) })), avoid_pairs: separationRules, absent_students: [...absentStudentIds],
-    }).select('id, class_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').single()
+    }).select('id, class_id, teaching_group_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').single()
     setSavingPlan(false)
     if (result.error || !result.data) { setPlannerError('Uue plaani salvestamine ei õnnestunud.'); return }
     const saved = result.data as SeatingPlan
@@ -757,7 +846,8 @@ function App() {
           {profile?.role === 'admin' && <div className="admin-shortcuts"><button className="button button--ghost" onClick={openUsersView}>Kasutajad</button><button className="button button--gold" onClick={() => setShowAdminForm(true)}>+ Lisa klass</button></div>}
         </section>
         {(dashboardError || dashboardNotice) && <div className={`notice dashboard-notice ${dashboardError ? 'notice--error' : 'notice--success'}`} role="status">{dashboardError || dashboardNotice}</div>}
-        <section className="class-section">
+        <div className="dashboard-view-tabs"><button className={dashboardView === 'classes' ? 'active' : ''} onClick={() => setDashboardView('classes')}>▦ Klassid</button><button className={dashboardView === 'teaching-groups' ? 'active' : ''} onClick={() => setDashboardView('teaching-groups')}>👥 Õpperühmad <span>{teachingGroups.length}</span></button></div>
+        {dashboardView === 'classes' && <section className="class-section">
           <div className="section-heading">
             <div><span className="eyebrow">Klassid</span><h2>{viewFilter === 'favorites' ? 'Minu klassid' : 'Kõik klassid'}</h2></div>
             <div className="class-tools">
@@ -783,7 +873,8 @@ function App() {
             {viewFilter === 'favorites' && classes.length > 0 && <button className="button button--ghost" onClick={() => setViewFilter('all')}>Vaata kõiki klasse</button>}
             {viewFilter === 'all' && profile?.role === 'admin' && <button className="button" onClick={() => setShowAdminForm(true)}>+ Lisa esimene klass</button>}
           </div>}
-        </section>
+        </section>}
+        {dashboardView === 'teaching-groups' && <section className="class-section teaching-groups-section"><div className="section-heading"><div><span className="eyebrow">Minu õpperühmad</span><h2>Õpperühmad</h2><p>Koonda ühe või mitme klassi õpilased püsivasse tunni- või keelerühma.</p></div><button className="button button--gold" onClick={() => openTeachingGroupEditor()}>+ Loo õpperühm</button></div>{dataLoading ? <div className="data-state"><div className="loader" /><p>Laen õpperühmi…</p></div> : teachingGroups.length ? <div className="class-grid">{teachingGroups.map((group) => { const memberCount = teachingGroupMembers.filter((member) => member.group_id === group.id).length; return <article className="class-card teaching-group-card" key={group.id}><button className="class-card__main" onClick={() => setSelectedTeachingGroup(group)}><span className="class-icon">ÕR</span><span className="class-card__copy"><strong>{group.name}</strong><span>{memberCount} õpilast</span></span><span className="arrow">→</span></button></article> })}</div> : <div className="empty-state"><span>👥</span><h3>Õpperühmi pole veel loodud</h3><p>Loo näiteks keelerühm ning vali sinna õpilased ühest või mitmest klassist.</p><button className="button" onClick={() => openTeachingGroupEditor()}>+ Loo esimene õpperühm</button></div>}</section>}
       </main>
 
       {showProfile && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowProfile(false)}><section className="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title"><div className="modal-header"><div><span className="eyebrow">Minu konto</span><h2 id="profile-title">Kuvatav nimi</h2><p>Seda nime näed rakenduse ülaservas.</p></div><button className="icon-button" onClick={() => setShowProfile(false)}>×</button></div><form onSubmit={saveProfileName}><div className="field"><label htmlFor="profile-name">Nimi</label><input id="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} minLength={2} maxLength={100} required /></div>{profileError && <div className="notice notice--error">{profileError}</div>}<div className="modal-actions"><button type="button" className="button button--ghost" onClick={() => setShowProfile(false)}>Loobu</button><button className="button" disabled={savingProfile}>{savingProfile ? 'Salvestan…' : 'Salvesta nimi'}</button></div></form></section></div>}
@@ -812,6 +903,10 @@ function App() {
         {savedPlans.some((plan) => plan.class_id === selectedClass.id) && <div className="saved-plan-list"><strong>Minu salvestatud plaanid</strong>{savedPlans.filter((plan) => plan.class_id === selectedClass.id).map((plan) => <div key={plan.id}><span><b>{plan.name}</b><small>Muudetud {new Date(plan.updated_at).toLocaleDateString('et-EE')}</small></span><button onClick={() => openSavedPlan(plan)}>Muuda</button><button onClick={() => openSavedPlan(plan, true)}>Klassivaade</button><button onClick={() => copyPlan(plan)}>Kopeeri</button><button className="danger-action" onClick={() => deletePlan(plan)}>Kustuta</button></div>)}</div>}
         <div className="modal-actions">{profile?.role === 'admin' && <><button className="button button--ghost button--edit" onClick={() => openClassEditor(selectedClass)}>Muuda klassi</button><button className="button button--danger-ghost" onClick={() => setClassArchived(selectedClass, true)}>Arhiveeri</button></>}<button className="button button--ghost" onClick={() => setSelectedClass(null)}>Sulge</button><button className="button" onClick={() => openPlanner(selectedClass)}>Koosta isteplaan →</button></div>
       </section></div>}
+
+      {selectedTeachingGroup && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedTeachingGroup(null)}><section className="modal roster-modal" role="dialog" aria-modal="true" aria-labelledby="teaching-group-title"><div className="modal-header"><div><span className="eyebrow">Õpperühm</span><h2 id="teaching-group-title">{selectedTeachingGroup.name}</h2><p>{selectedTeachingGroupStudents.length} õpilast · {new Set(selectedTeachingGroupStudents.map((student) => student.class_id)).size} klassist</p></div><button className="icon-button" onClick={() => setSelectedTeachingGroup(null)} aria-label="Sulge">×</button></div><ol className="student-list">{selectedTeachingGroupStudents.map((student) => <li key={student.id}><span>{student.first_name} {student.last_name}</span><small>{classes.find((schoolClass) => schoolClass.id === student.class_id)?.name}</small></li>)}</ol>{savedPlans.some((plan) => plan.teaching_group_id === selectedTeachingGroup.id) && <div className="saved-plan-list"><strong>Minu salvestatud plaanid</strong>{savedPlans.filter((plan) => plan.teaching_group_id === selectedTeachingGroup.id).map((plan) => <div key={plan.id}><span><b>{plan.name}</b><small>Muudetud {new Date(plan.updated_at).toLocaleDateString('et-EE')}</small></span><button onClick={() => openSavedPlan(plan)}>Muuda</button><button onClick={() => openSavedPlan(plan, true)}>Klassivaade</button><button onClick={() => copyPlan(plan)}>Kopeeri</button><button className="danger-action" onClick={() => deletePlan(plan)}>Kustuta</button></div>)}</div>}<div className="modal-actions"><button className="button button--danger-ghost" onClick={() => deleteTeachingGroup(selectedTeachingGroup)}>Kustuta</button><button className="button button--ghost" onClick={() => openTeachingGroupEditor(selectedTeachingGroup)}>Muuda rühma</button><button className="button" onClick={() => openTeachingGroupPlanner(selectedTeachingGroup)}>Koosta isteplaan →</button></div></section></div>}
+
+      {showTeachingGroupForm && <div className="modal-backdrop" role="presentation"><section className="modal teaching-group-modal" role="dialog" aria-modal="true" aria-labelledby="teaching-group-form-title"><div className="modal-header"><div><span className="eyebrow">Õpperühm</span><h2 id="teaching-group-form-title">{editingTeachingGroup ? 'Muuda õpperühma' : 'Loo õpperühm'}</h2><p>Vali klassid ja seejärel konkreetsed õpilased.</p></div><button className="icon-button" onClick={() => setShowTeachingGroupForm(false)} aria-label="Sulge">×</button></div><form onSubmit={saveTeachingGroup}><div className="field"><label htmlFor="teaching-group-name">Õpperühma nimi</label><input id="teaching-group-name" value={teachingGroupName} onChange={(event) => setTeachingGroupName(event.target.value)} placeholder="Näiteks 8.a ja 8.b inglise keel – I rühm" required /></div><div className="teaching-group-builder"><div><strong>1. Vali klassid</strong><div className="class-checkboxes">{activeClasses.map((schoolClass) => <label key={schoolClass.id}><input type="checkbox" checked={teachingGroupClassIds.has(schoolClass.id)} onChange={() => toggleTeachingGroupClass(schoolClass.id)} /><span>{schoolClass.name}</span></label>)}</div></div><div><strong>2. Vali õpilased <span>({teachingGroupStudentIds.size})</span></strong><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={teachingGroupSearch} onChange={(event) => setTeachingGroupSearch(event.target.value)} /><div className="teaching-student-picker">{teachingGroupCandidateStudents.map((student) => <label key={student.id}><input type="checkbox" checked={teachingGroupStudentIds.has(student.id)} onChange={() => setTeachingGroupStudentIds((current) => { const next = new Set(current); next.has(student.id) ? next.delete(student.id) : next.add(student.id); return next })} /><span>{student.first_name} {student.last_name}</span><small>{classes.find((schoolClass) => schoolClass.id === student.class_id)?.name}</small></label>)}{!teachingGroupClassIds.size && <p>Vali esmalt vähemalt üks klass.</p>}</div></div></div><div className="modal-actions"><button type="button" className="button button--ghost" onClick={() => setShowTeachingGroupForm(false)}>Loobu</button><button className="button" disabled={savingTeachingGroup}>{savingTeachingGroup ? 'Salvestan…' : 'Salvesta õpperühm'}</button></div></form></section></div>}
 
       {showAbsences && pendingPlan && <div className="modal-backdrop"><section className="modal absence-modal" role="dialog" aria-modal="true" aria-labelledby="absence-title"><div className="modal-header"><div><span className="eyebrow">Kohaloleku kontroll</span><h2 id="absence-title">Eelmisel korral puudusid</h2><p>Kontrolli nimed üle enne plaani avamist.</p></div></div><div className="previous-absences">{pendingPlan.absent_students.map((studentId) => { const student = students.find((item) => item.id === studentId); return <label key={studentId}><input type="checkbox" checked={absentStudentIds.has(studentId)} onChange={() => setAbsentStudentIds((current) => { const next = new Set(current); next.has(studentId) ? next.delete(studentId) : next.add(studentId); return next })} /><span>{student?.first_name} {student?.last_name}</span><small>{absentStudentIds.has(studentId) ? 'On ikka puudu' : 'On kohal'}</small></label> })}</div><p className="absence-help">Kui õpilane on nüüd kohal, lisatakse ta isteplaanil vabale tahvlipoolsele kohale. Rühmatöös lisatakse ta kõige väiksemasse rühma – teisi ümber ei loosita.</p><div className="modal-actions"><button className="button button--ghost" onClick={() => { setAbsentStudentIds(new Set()); applySavedPlan(pendingPlan, false, new Set()); setShowAbsences(false); setPendingPlan(null) }}>Kõik on kohal</button><button className="button" onClick={() => { applySavedPlan(pendingPlan, false, absentStudentIds); setShowAbsences(false); setPendingPlan(null) }}>Jätka märgitutega</button></div></section></div>}
 
