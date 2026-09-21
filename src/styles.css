@@ -65,6 +65,8 @@ input:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, .12
 .account { display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 600; }
 .account-name { padding: 5px; border: 0; background: transparent; color: #17382f; font-weight: 700; cursor: pointer; }
 .badge { padding: 5px 8px; border-radius: 999px; background: #fff0c9; color: #765717; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.demo-toggle { border: 1px solid #d7c07d; background: #fff8df; color: #725412; }
+.demo-toggle:hover:not(:disabled), .demo-toggle--active { border-color: #c59628; background: #f5df9f; color: #553c05; }
 .dashboard { width: min(1180px, 90vw); margin: 0 auto; padding: 64px 0; }
 .welcome-card { display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; padding: 38px; border-radius: 22px; color: white; background: #17382f; }
 .welcome-card h1 { max-width: 650px; font-size: clamp(32px, 4vw, 48px); }
@@ -399,7 +401,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .topbar { padding: 0 20px; }
   .account-name { display: none; }
   .account { gap: 6px; }
-  .account .button--compact { padding: 8px 9px; font-size: 11px; }
+.account .button--compact { padding: 8px 9px; font-size: 11px; }
   .welcome-card { align-items: flex-start; flex-direction: column; }
   .admin-shortcuts { width: 100%; }
   .placeholder-grid { grid-template-columns: 1fr; }
