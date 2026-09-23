@@ -180,6 +180,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .modal-backdrop:has(.help-modal:not(.help-modal--current)) { display: none; }
 .help-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; padding: 5px; border-radius: 13px; background: #edf3ef; }
 .help-tabs--three { grid-template-columns: repeat(3, 1fr); }
+.help-tabs--four { grid-template-columns: repeat(4, 1fr); }
 .help-tabs button { padding: 11px 12px; border: 0; border-radius: 9px; background: transparent; color: #52645a; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
 .help-tabs button.active { background: #fff; color: #174a3a; box-shadow: 0 3px 10px rgba(23, 56, 47, .09); }
 .help-steps { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; counter-reset: help; }
@@ -459,6 +460,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .classroom-select select { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: #fff; color: var(--text); font: inherit; }
 
 @media (max-width: 760px) {
+  .help-tabs--four { grid-template-columns: 1fr 1fr; }
   .brand--small .app-brand-logo { width: min(250px, 62vw); }
   .brand--login .app-brand-logo { width: min(360px, 100%); }
     .classroom-card { align-items: flex-start; flex-wrap: wrap; }
