@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 150" role="img" aria-label="Isteplaan logo"><title>Isteplaan</title><g transform="translate(10 11)">
+  <!-- Üks selge, eestvaates koolitool. -->
+  <g fill="none" stroke="#187F70" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M37 51V27M91 51V27"/>
+    <path d="M34 79v34m60-34v34M35 100h58M25 114h18m42 0h18"/>
+  </g>
+  <rect x="30" y="18" width="68" height="35" rx="8" fill="#F3D18C" stroke="#176A55" stroke-width="4"/>
+  <path d="M27 65q0-5 5-5h64q5 0 5 5v11q0 5-5 5H32q-5 0-5-5Z" fill="#F3D18C" stroke="#176A55" stroke-width="4"/>
+  <path d="M31 76h66" stroke="#D3A95C" stroke-width="2" stroke-linecap="round"/>
+  <g fill="#176A55">
+    <circle cx="37" cy="27" r="1.8"/><circle cx="91" cy="27" r="1.8"/>
+    <circle cx="37" cy="66" r="1.8"/><circle cx="91" cy="66" r="1.8"/>
+  </g>
+</g><text x="151" y="98" fill="#193B2B" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700" letter-spacing="-2">Isteplaan</text></svg>
