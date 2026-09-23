@@ -428,3 +428,35 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .plan-finish > label { width: 100%; }
   .plan-finish .preview-actions { flex-wrap: wrap; }
 }
+
+
+/* Salvestatud klassiruumid */
+.classroom-list { display: grid; gap: 12px; }
+.classroom-card { display: flex; align-items: center; gap: 16px; padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: #fff; }
+.classroom-card__icon { display: grid; place-items: center; width: 52px; height: 52px; flex: 0 0 auto; border-radius: 15px; background: var(--green-pale); font-size: 24px; }
+.classroom-card__copy { min-width: 0; flex: 1; display: grid; gap: 5px; }
+.classroom-card__copy > div { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.classroom-card__copy strong { font-size: 18px; color: var(--green-dark); }
+.classroom-card__copy > span { color: var(--muted); font-size: 14px; }
+.default-badge { padding: 4px 9px; border-radius: 999px; background: #fff1c7; color: #835c00; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.classroom-card__actions { display: flex; align-items: center; gap: 8px; }
+.classroom-modal { width: min(1080px, calc(100vw - 32px)); max-width: 1080px; }
+.classroom-modal form { display: grid; grid-template-columns: minmax(270px, 340px) 1fr; gap: 22px; }
+.classroom-editor-controls { display: grid; align-content: start; gap: 16px; }
+.classroom-editor-canvas { min-width: 0; padding: 20px; border-radius: 18px; background: #f5f8f5; overflow: auto; }
+.classroom-editor-canvas .desk-grid { min-width: 420px; }
+.classroom-editor-canvas .desk { min-height: 82px; }
+.classroom-editor-canvas .seat { min-height: 44px; }
+.classroom-modal .notice, .classroom-modal .modal-actions { grid-column: 1 / -1; }
+.default-checkbox { display: flex; align-items: center; gap: 10px; padding: 13px 14px; border-radius: 12px; background: var(--green-pale); color: var(--green-dark); font-weight: 700; }
+.default-checkbox input { width: 18px; height: 18px; accent-color: var(--green); }
+.classroom-select { display: grid; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.classroom-select select { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: #fff; color: var(--text); font: inherit; }
+
+@media (max-width: 760px) {
+  .classroom-card { align-items: flex-start; flex-wrap: wrap; }
+  .classroom-card__copy { min-width: calc(100% - 70px); }
+  .classroom-card__actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .classroom-modal form { grid-template-columns: 1fr; }
+  .classroom-editor-canvas { padding: 12px; }
+}
