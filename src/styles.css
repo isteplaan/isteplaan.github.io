@@ -469,3 +469,48 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .classroom-modal form { grid-template-columns: 1fr; }
   .classroom-editor-canvas { padding: 12px; }
 }
+
+
+/* Veebiteated ja tagasiside */
+.notification-wrap { position: relative; }
+.notification-button { position: relative; width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border: 1px solid #d8e3db; border-radius: 12px; background: #f7faf8; color: #17382f; font-size: 18px; cursor: pointer; }
+.notification-button:hover, .notification-button--unread { border-color: #d5a747; background: #fff7df; }
+.notification-button > span { position: absolute; top: -6px; right: -6px; min-width: 19px; height: 19px; display: grid; place-items: center; padding: 0 5px; border: 2px solid #fff; border-radius: 999px; background: #b84b3f; color: #fff; font-size: 10px; font-weight: 800; }
+.notification-panel { position: absolute; z-index: 80; top: calc(100% + 12px); right: 0; width: min(430px, calc(100vw - 24px)); max-height: min(620px, 72vh); overflow: auto; padding: 18px; border: 1px solid #d9e3dc; border-radius: 18px; background: #fff; box-shadow: 0 22px 60px rgba(15, 43, 34, .2); }
+.notification-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 13px; border-bottom: 1px solid #e5ece7; }
+.notification-panel__header .eyebrow { margin: 0 0 2px; }
+.notification-panel__header h3 { margin: 0; font-family: Manrope, sans-serif; font-size: 20px; }
+.notification-list { display: grid; gap: 9px; padding-top: 12px; }
+.notification-list article { position: relative; padding: 13px; border-radius: 12px; background: #f3f7f4; }
+.notification-list article > div { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.notification-list strong { color: #17382f; }
+.notification-list time { flex: 0 0 auto; color: #7b8981; font-size: 10px; }
+.notification-list p { margin: 7px 0 0; color: #53665c; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.notification-delete { margin-top: 8px; padding: 0; border: 0; background: transparent; color: #963c34; font-size: 11px; font-weight: 800; cursor: pointer; }
+.notification-empty { padding: 34px 12px 22px; color: #718078; text-align: center; }
+.communication-modal select, .feedback-card select { width: 100%; padding: 11px 12px; border: 1px solid #cad7ce; border-radius: 10px; background: #fbfcfb; color: #17382f; }
+.feedback-inbox-modal { width: min(900px, 100%); }
+.feedback-inbox-list { max-height: 62vh; overflow: auto; display: grid; gap: 11px; padding-right: 4px; }
+.feedback-card { padding: 16px; border: 1px solid #dfe8e1; border-left: 5px solid #d5a747; border-radius: 14px; background: #fbfcfb; }
+.feedback-card--reviewing { border-left-color: #4f83b8; }
+.feedback-card--resolved { border-left-color: #4f9369; opacity: .78; }
+.feedback-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.feedback-card__top > div { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.feedback-card__top time { color: #7b8981; font-size: 11px; }
+.feedback-category { padding: 4px 8px; border-radius: 999px; background: #f8e6e3; color: #8a3b32; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.feedback-category--idea { background: #fff0c9; color: #765717; }
+.feedback-category--other { background: #e5eee8; color: #365f50; }
+.feedback-card > p { margin: 13px 0; color: #4f6258; line-height: 1.55; white-space: pre-wrap; }
+.feedback-card__footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 11px; border-top: 1px solid #e7ede9; color: #718078; font-size: 12px; }
+.feedback-card__footer > div { display: flex; align-items: center; gap: 7px; }
+.feedback-card__footer select { width: auto; padding: 8px 9px; font-size: 11px; font-weight: 700; }
+.feedback-card__footer .danger-action { padding: 8px 10px; border: 0; border-radius: 8px; background: #f7e6e4; color: #963c34; font-size: 11px; font-weight: 800; cursor: pointer; }
+.help-tabs--five { grid-template-columns: repeat(5, 1fr); }
+
+@media (max-width: 800px) {
+  .notification-panel { position: fixed; top: 70px; right: 12px; }
+  .feedback-trigger { display: none; }
+  .feedback-card__top, .feedback-card__footer { align-items: stretch; flex-direction: column; }
+  .feedback-card__footer > div { align-items: stretch; flex-direction: column; }
+  .help-tabs--five { grid-template-columns: 1fr 1fr; }
+}
