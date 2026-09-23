@@ -695,6 +695,7 @@ function App() {
       next.has(deskIndex) ? next.delete(deskIndex) : next.add(deskIndex)
       return next
     })
+    setActiveClassroomId('')
     setAssignments([])
     setLockedStudents(new Set())
     setPlannerError('')
@@ -706,7 +707,7 @@ function App() {
       next[deskIndex] = next[deskIndex] === 3 ? 1 : next[deskIndex] + 1
       return next
     })
-    setAssignments([]); setLockedStudents(new Set()); setPlannerError('')
+    setActiveClassroomId(''); setAssignments([]); setLockedStudents(new Set()); setPlannerError('')
   }
 
   function openTeachingGroupEditor(group?: TeachingGroup) {
@@ -1056,8 +1057,8 @@ function App() {
             {activityType === 'seating' && <><div className="control-divider" />
             <div><span className="eyebrow">1. Klassiruum</span><h2>Lauad ja kohad</h2></div>
             {classroomLayouts.length > 0 && <label className="classroom-select">Salvestatud klassiruum<select value={activeClassroomId} onChange={(event) => { const layout = classroomLayouts.find((room) => room.id === event.target.value) || null; applyClassroomLayout(layout) }}><option value="">Kohandatud paigutus</option>{classroomLayouts.map((room) => <option key={room.id} value={room.id}>{room.name}{room.is_default ? ' (vaikimisi)' : ''}</option>)}</select></label>}
-            <div className="option-grid option-grid--three"><button className={deskType === 'pair' ? 'active' : ''} onClick={() => { setDeskType('pair'); setDeskCapacities(Array(totalDeskCount).fill(2)); setAssignments([]) }}><strong>▭ Paarislauad</strong><span>Kaks kohta</span></button><button className={deskType === 'single' ? 'active' : ''} onClick={() => { setDeskType('single'); setDeskCapacities(Array(totalDeskCount).fill(1)); setAssignments([]) }}><strong>□ Üksikud</strong><span>Üks koht</span></button><button className={deskType === 'mixed' ? 'active' : ''} onClick={() => { setDeskType('mixed'); setDeskCapacities(Array(totalDeskCount).fill(2)); setAssignments([]) }}><strong>▦ Hübriid</strong><span>1–3 kohta</span></button></div>
-            <div className="number-fields"><label>Ridu<input type="number" min="1" max="10" value={deskRows} onChange={(event) => { const rows = Math.max(1, Number(event.target.value)); setDeskRows(rows); setDeskCapacities(Array(rows * deskColumns).fill(deskType === 'single' ? 1 : 2)); setDisabledDesks(new Set()); setAssignments([]) }} /></label><label>Veerge<input type="number" min="1" max="10" value={deskColumns} onChange={(event) => { const columns = Math.max(1, Number(event.target.value)); setDeskColumns(columns); setDeskCapacities(Array(deskRows * columns).fill(deskType === 'single' ? 1 : 2)); setDisabledDesks(new Set()); setAssignments([]) }} /></label><div><span>Kohti</span><strong className={seatCount < plannerStudents.length ? 'capacity-bad' : ''}>{seatCount}</strong></div></div>
+            <div className="option-grid option-grid--three"><button className={deskType === 'pair' ? 'active' : ''} onClick={() => { setActiveClassroomId(''); setDeskType('pair'); setDeskCapacities(Array(totalDeskCount).fill(2)); setAssignments([]) }}><strong>▭ Paarislauad</strong><span>Kaks kohta</span></button><button className={deskType === 'single' ? 'active' : ''} onClick={() => { setActiveClassroomId(''); setDeskType('single'); setDeskCapacities(Array(totalDeskCount).fill(1)); setAssignments([]) }}><strong>□ Üksikud</strong><span>Üks koht</span></button><button className={deskType === 'mixed' ? 'active' : ''} onClick={() => { setActiveClassroomId(''); setDeskType('mixed'); setDeskCapacities(Array(totalDeskCount).fill(2)); setAssignments([]) }}><strong>▦ Hübriid</strong><span>1–3 kohta</span></button></div>
+            <div className="number-fields"><label>Ridu<input type="number" min="1" max="10" value={deskRows} onChange={(event) => { const rows = Math.max(1, Number(event.target.value)); setActiveClassroomId(''); setDeskRows(rows); setDeskCapacities(Array(rows * deskColumns).fill(deskType === 'single' ? 1 : 2)); setDisabledDesks(new Set()); setAssignments([]) }} /></label><label>Veerge<input type="number" min="1" max="10" value={deskColumns} onChange={(event) => { const columns = Math.max(1, Number(event.target.value)); setActiveClassroomId(''); setDeskColumns(columns); setDeskCapacities(Array(deskRows * columns).fill(deskType === 'single' ? 1 : 2)); setDisabledDesks(new Set()); setAssignments([]) }} /></label><div><span>Kohti</span><strong className={seatCount < plannerStudents.length ? 'capacity-bad' : ''}>{seatCount}</strong></div></div>
             <p className="control-help">Üleliigse laua eemaldamiseks vajuta laua nurgas ×. Hübriidpaigutuses vajuta laual nuppu „1/2/3 kohta“, et muuta iga laua suurust eraldi.</p>
 
             <div className="control-divider" />
