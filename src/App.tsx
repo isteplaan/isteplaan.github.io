@@ -26,6 +26,7 @@ type SeparationRule = { firstId: string; secondId: string; setId?: string; kind?
 type StoredSeat = { student_id: string | null; disabled?: boolean; group?: number; solo?: boolean; desk_size?: number }
 type SeatingPlan = { id: string; class_id: string | null; teaching_group_id: string | null; name: string; rows: number; cols: number; seat_type: DeskType; mode: DrawMode; seats: StoredSeat[]; avoid_pairs: SeparationRule[]; activity_type: ActivityType; group_size: number | null; absent_students: string[]; updated_at: string }
 type AdminUser = { user_id: string; email: string; display_name: string | null; role: 'teacher' | 'admin'; active: boolean; joined_at: string; last_seen_at: string | null; favorite_classes: string[]; saved_classes: string[]; plan_count: number }
+type AdminSeatingPlan = SeatingPlan & { teacher_id: string }
 type Announcement = { id: string; author_id: string; title: string; body: string; active: boolean; expires_at: string | null; created_at: string; updated_at: string }
 type FeedbackReport = { id: string; user_id: string; category: 'problem' | 'idea' | 'other'; subject: string; message: string; status: 'new' | 'reviewing' | 'resolved'; created_at: string; updated_at: string; profiles?: { display_name: string | null; email: string } | null }
 
@@ -218,6 +219,12 @@ function App() {
   const [showUsers, setShowUsers] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
+  const [showAdminPlans, setShowAdminPlans] = useState(false)
+  const [adminPlanOwner, setAdminPlanOwner] = useState<AdminUser | null>(null)
+  const [adminSavedPlans, setAdminSavedPlans] = useState<AdminSeatingPlan[]>([])
+  const [adminPlansLoading, setAdminPlansLoading] = useState(false)
+  const [adminPlansError, setAdminPlansError] = useState('')
+  const [viewingAdminPlan, setViewingAdminPlan] = useState(false)
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
   const [userSearch, setUserSearch] = useState('')
@@ -490,9 +497,9 @@ function App() {
     applySavedPlan(plan, showPresentation, new Set())
   }
 
-  function applySavedPlan(plan: SeatingPlan, showPresentation = false, absences = new Set<string>()) {
+  function applySavedPlan(plan: SeatingPlan, showPresentation = false, absences = new Set<string>(), overrideClass: SchoolClass | null = null) {
     const teachingGroup = plan.teaching_group_id ? teachingGroups.find((item) => item.id === plan.teaching_group_id) || null : null
-    const schoolClass = teachingGroup ? { id: teachingGroup.id, name: teachingGroup.name, academic_year: 'Õpperühm', archived: false } : classes.find((item) => item.id === plan.class_id)
+    const schoolClass = overrideClass || (teachingGroup ? { id: teachingGroup.id, name: teachingGroup.name, academic_year: 'Õpperühm', archived: false } : classes.find((item) => item.id === plan.class_id))
     if (!schoolClass) return
     const seatMultiplier = plan.seat_type === 'mixed' ? 3 : plan.seat_type === 'pair' ? 2 : 1
     const nextActivity = plan.activity_type || 'seating'
@@ -954,6 +961,28 @@ function App() {
     setAdminUsers((result.data || []) as AdminUser[])
   }
 
+  async function openAdminPlansView(user: AdminUser) {
+    if (!supabase || profile?.role !== 'admin') return
+    setAdminPlanOwner(user); setShowAdminPlans(true); setAdminPlansLoading(true); setAdminPlansError(''); setAdminSavedPlans([])
+    const result = await supabase.from('seating_plans')
+      .select('id, teacher_id, class_id, teaching_group_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at')
+      .eq('teacher_id', user.user_id)
+      .order('updated_at', { ascending: false })
+    setAdminPlansLoading(false)
+    if (result.error) { setAdminPlansError('Selle kasutaja isteplaane ei õnnestunud laadida.'); return }
+    setAdminSavedPlans((result.data || []) as AdminSeatingPlan[])
+  }
+
+  function viewAdminSavedPlan(plan: AdminSeatingPlan) {
+    const scope = plan.class_id
+      ? classes.find((item) => item.id === plan.class_id) || null
+      : { id: plan.teaching_group_id || plan.id, name: plan.name, academic_year: 'Õpperühm', archived: false }
+    if (!scope) { setAdminPlansError('Plaani klassi ei leitud.'); return }
+    applySavedPlan(plan, true, new Set(plan.absent_students || []), scope)
+    setEditingPlanId(null); setRevealCount(plan.seats.length + 1); setViewingAdminPlan(true)
+    setShowAdminPlans(false); setShowUsers(false)
+  }
+
   async function toggleNotifications() {
     const opening = !showNotifications
     setShowNotifications(opening)
@@ -1145,10 +1174,19 @@ function App() {
           {filteredAdminUsers.map((user) => <article key={user.user_id} className={!user.active ? 'user-card user-card--inactive' : 'user-card'}>
             <div className="user-identity"><span>{(user.display_name || user.email).slice(0, 1).toUpperCase()}</span><div><strong>{user.display_name || user.email.split('@')[0]}</strong><small>{user.email}</small></div>{user.role === 'admin' && <b>Admin</b>}</div>
             <div className="user-activity"><span><small>Liitus</small>{new Date(user.joined_at).toLocaleDateString('et-EE')}</span><span><small>Viimati kasutas</small>{user.last_seen_at ? new Date(user.last_seen_at).toLocaleString('et-EE', { dateStyle: 'short', timeStyle: 'short' }) : 'Pole veel kasutanud'}</span><span><small>Plaane</small>{user.plan_count}</span></div>
-            <div className="user-classes"><div><small>Tärniga klassid</small>{user.favorite_classes.length ? user.favorite_classes.map((name) => <span key={name}>★ {name}</span>) : <em>Puuduvad</em>}</div><div><small>Plaanid klassidele</small>{user.saved_classes.length ? user.saved_classes.map((name) => <span key={name}>{name}</span>) : <em>Puuduvad</em>}</div></div>
+            <div className="user-classes"><div><small>Tärniga klassid</small>{user.favorite_classes.length ? user.favorite_classes.map((name) => <span key={name}>★ {name}</span>) : <em>Puuduvad</em>}</div><div><small>Plaanid klassidele ja rühmadele</small>{user.saved_classes.length ? user.saved_classes.map((name) => <span key={name}>{name}</span>) : <em>Puuduvad</em>}</div></div>
+            <button className="user-plans-button" disabled={!Number(user.plan_count)} onClick={() => openAdminPlansView(user)}>{Number(user.plan_count) ? `Vaata salvestatud plaane (${user.plan_count})` : 'Salvestatud plaanid puuduvad'}</button>
           </article>)}
           {!filteredAdminUsers.length && <div className="mini-empty">Sobivaid kasutajaid ei leitud.</div>}
         </div>}
+      </section></div>}
+
+      {showAdminPlans && <div className="modal-backdrop admin-plans-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowAdminPlans(false)}><section className="modal admin-plans-modal" role="dialog" aria-modal="true" aria-labelledby="admin-plans-title">
+        <div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="admin-plans-title">{adminPlanOwner?.display_name || adminPlanOwner?.email.split('@')[0] || 'Õpetaja'} isteplaanid</h2><p>{adminPlanOwner?.email} · plaane saab avada ainult vaatamiseks.</p></div><button className="icon-button" onClick={() => setShowAdminPlans(false)} aria-label="Sulge">×</button></div>
+        {adminPlansLoading ? <div className="data-state"><div className="loader" /><p>Laen isteplaane…</p></div> : adminPlansError ? <div className="notice notice--error">{adminPlansError}</div> : adminSavedPlans.length ? <div className="admin-plan-list">{adminSavedPlans.map((plan) => {
+          const scopeName = plan.class_id ? classes.find((item) => item.id === plan.class_id)?.name || 'Klass' : 'Õpperühm'
+          return <article key={plan.id}><div><strong>{plan.name}</strong><span>{scopeName} · {plan.activity_type === 'groups' ? 'rühmatöö' : 'istekohad'} · muudetud {new Date(plan.updated_at).toLocaleString('et-EE', { dateStyle: 'short', timeStyle: 'short' })}</span></div><button className="button button--compact" onClick={() => viewAdminSavedPlan(plan)}>Ava</button></article>
+        })}</div> : <div className="mini-empty">Sellel kasutajal ei ole salvestatud isteplaane.</div>}
       </section></div>}
 
       {selectedClass && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedClass(null)}><section className="modal roster-modal" role="dialog" aria-modal="true" aria-labelledby="roster-title">
@@ -1230,7 +1268,7 @@ function App() {
       </div>}
 
       {presentationMode && plannerClass && <div className={`presentation-view ${printOnly ? 'presentation-view--print-only' : ''}`}>
-        <header><div><img className="presentation-logo" src={printOnly ? appLogoWithUrl : appLogoUrl} alt={printOnly ? 'Isteplaan – isteplaan.github.io' : 'Isteplaan'} /><span><span className="eyebrow">{activityType === 'groups' ? 'Rühmade loosimine' : 'Kohtade loosimine'}</span><h1>{plannerClass.name}</h1></span></div><button onClick={() => { setPresentationMode(false); setDrawing(false) }}>×</button></header>
+        <header><div><img className="presentation-logo" src={printOnly ? appLogoWithUrl : appLogoUrl} alt={printOnly ? 'Isteplaan – isteplaan.github.io' : 'Isteplaan'} /><span><span className="eyebrow">{activityType === 'groups' ? 'Rühmade loosimine' : 'Kohtade loosimine'}</span><h1>{plannerClass.name}</h1></span></div><button onClick={() => { setPresentationMode(false); setDrawing(false); if (viewingAdminPlan) { setViewingAdminPlan(false); setPlannerClass(null); setPlannerTeachingGroup(null) } }}>×</button></header>
         <main className="presentation-room">
           {activityType === 'groups' ? <div className="presentation-groups">{groups.map((group, groupIndex) => <article key={groupIndex}><h2>Rühm {groupIndex + 1}</h2>{group.map((studentId) => { const student = studentById.get(studentId); const memberIndex = groups.flat().indexOf(studentId); const visible = memberIndex < revealCount; const rollingStudent = plannerStudents.length ? plannerStudents[(animationTick + memberIndex * 2) % plannerStudents.length] : null; const shown = visible ? student : drawing ? rollingStudent : null; return <span className={visible ? 'group-member--settled' : ''} key={studentId}>{shown ? `${shown.first_name} ${shown.last_name}` : ' '}</span> })}</article>)}</div> : <><div className="presentation-grid" style={{ gridTemplateColumns: `repeat(${deskColumns}, minmax(130px, 1fr))` }}>
             {Array.from({ length: totalDeskCount }, (_, deskIndex) => disabledDesks.has(deskIndex) ? <div key={deskIndex} /> : <div className={`presentation-desk presentation-desk--${capacityForDesk(deskIndex)}`} key={deskIndex}>
