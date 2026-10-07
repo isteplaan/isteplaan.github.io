@@ -514,3 +514,21 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .feedback-card__footer > div { align-items: stretch; flex-direction: column; }
   .help-tabs--five { grid-template-columns: 1fr 1fr; }
 }
+
+
+/* Administraatori salvestatud isteplaanide vaade */
+.user-plans-button { width: 100%; margin-top: 13px; padding: 10px 12px; border: 1px solid #c8d9ce; border-radius: 10px; background: #edf4ef; color: #27634f; font-size: 12px; font-weight: 800; cursor: pointer; }
+.user-plans-button:hover:not(:disabled) { border-color: #7fa28f; background: #e2eee6; }
+.user-plans-button:disabled { opacity: .55; cursor: default; }
+.admin-plans-backdrop { z-index: 90; }
+.admin-plans-modal { width: min(760px, 100%); }
+.admin-plan-list { display: grid; gap: 10px; }
+.admin-plan-list article { display: flex; align-items: center; gap: 14px; padding: 15px; border: 1px solid #dfe8e1; border-radius: 14px; background: #fbfcfb; }
+.admin-plan-list article > div { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.admin-plan-list strong { color: #17382f; font-family: Manrope, sans-serif; font-size: 16px; }
+.admin-plan-list span { color: #718078; font-size: 12px; line-height: 1.45; }
+
+@media (max-width: 800px) {
+  .admin-plan-list article { align-items: stretch; flex-direction: column; }
+  .admin-plan-list article .button { width: 100%; }
+}
