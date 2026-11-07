@@ -159,9 +159,10 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .member-editor-header span { color: #7b8981; font-size: 12px; }
 .member-editor-header .template-button { margin: 0; }
 .member-editor { max-height: 330px; overflow: auto; display: grid; gap: 7px; padding-right: 4px; }
-.member-row { display: grid; grid-template-columns: 26px 1fr 1fr 34px; align-items: center; gap: 8px; }
+.member-row { display: grid; grid-template-columns: 26px minmax(120px, 1fr) minmax(120px, 1fr) 118px 34px; align-items: center; gap: 8px; }
 .member-row > span { color: #8a978f; font-size: 12px; text-align: center; }
-.member-row input { padding: 10px 11px; }
+.member-row input, .member-row select { min-width: 0; padding: 10px 11px; }
+.member-row select { border: 1px solid #cad7ce; border-radius: 9px; background: #fff; color: #17382f; }
 .member-row button { width: 32px; height: 32px; border: 0; border-radius: 9px; background: #f8e9e7; color: #9a3d35; font-size: 20px; cursor: pointer; }
 .small-modal { width: min(470px, 100%); }
 .teaching-group-modal { width: min(860px, 100%); }
@@ -230,6 +231,12 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .option-grid button { display: grid; gap: 4px; padding: 14px 12px; border: 1px solid #d9e4dc; border-radius: 12px; background: #fafcfb; color: #17382f; text-align: left; cursor: pointer; }
 .option-grid button.active { border-color: #3c745f; background: #eaf3ed; box-shadow: inset 0 0 0 1px #3c745f; }
 .option-grid button span { color: #78867e; font-size: 11px; line-height: 1.35; }
+.mixed-gender-toggle { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid #d9e4dc; border-radius: 12px; background: #fafcfb; cursor: pointer; }
+.mixed-gender-toggle.active { border-color: #3c745f; background: #eaf3ed; box-shadow: inset 0 0 0 1px #3c745f; }
+.mixed-gender-toggle input { width: auto; margin-top: 2px; accent-color: #27634f; }
+.mixed-gender-toggle > span { display: grid; gap: 3px; }
+.mixed-gender-toggle strong { color: #17382f; font-size: 13px; }
+.mixed-gender-toggle small { color: #728078; font-size: 11px; line-height: 1.4; }
 .number-fields { display: grid; grid-template-columns: 1fr 1fr .8fr; gap: 9px; margin-top: 12px; }
 .number-fields label, .number-fields > div { display: grid; gap: 5px; color: #728078; font-size: 11px; font-weight: 700; }
 .number-fields input { padding: 9px 10px; }
@@ -419,6 +426,8 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .class-grid { grid-template-columns: 1fr; }
   .field-row, .student-list { grid-template-columns: 1fr; }
   .member-row { grid-template-columns: 22px 1fr 1fr 32px; gap: 5px; }
+  .member-row select { grid-column: 2 / 4; }
+  .member-row button { grid-column: 4; grid-row: 1 / span 2; }
   .user-stats { grid-template-columns: 1fr; }
   .user-activity, .user-classes { grid-template-columns: 1fr; }
   .archive-list > div { align-items: stretch; flex-direction: column; }
