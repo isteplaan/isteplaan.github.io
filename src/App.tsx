@@ -11,12 +11,13 @@ const classNameCollator = new Intl.Collator('et', { numeric: true, sensitivity: 
 
 type Profile = { display_name: string | null; role: 'teacher' | 'admin' }
 type SchoolClass = { id: string; name: string; academic_year: string; archived: boolean }
-type Student = { id: string; class_id: string; first_name: string; last_name: string }
+type StudentGender = 'boy' | 'girl'
+type Student = { id: string; class_id: string; first_name: string; last_name: string; gender: StudentGender | null }
 type TeachingGroup = { id: string; teacher_id: string; name: string; updated_at: string }
 type TeachingGroupMember = { group_id: string; student_id: string }
 type ClassroomLayout = { id: string; teacher_id: string; name: string; rows: number; cols: number; desk_type: DeskType; disabled_desks: number[]; desk_capacities: number[]; is_default: boolean; updated_at: string }
 type DashboardView = 'classes' | 'teaching-groups' | 'classrooms'
-type EditableStudent = { id?: string; first_name: string; last_name: string }
+type EditableStudent = { id?: string; first_name: string; last_name: string; gender: StudentGender | null }
 type ViewFilter = 'favorites' | 'all'
 type AdminMode = 'single' | 'import'
 type DeskType = 'single' | 'pair' | 'mixed'
@@ -196,6 +197,7 @@ function App() {
   const [absentStudentIds, setAbsentStudentIds] = useState<Set<string>>(new Set())
   const [absenceSearch, setAbsenceSearch] = useState('')
   const [soloStudentIds, setSoloStudentIds] = useState<Set<string>>(new Set())
+  const [preferMixedGender, setPreferMixedGender] = useState(false)
   const [soloSearch, setSoloSearch] = useState('')
   const [showAbsences, setShowAbsences] = useState(false)
   const [pendingPlan, setPendingPlan] = useState<SeatingPlan | null>(null)
@@ -291,7 +293,7 @@ function App() {
       const [profileResult, classesResult, studentsResult, favoritesResult, plansResult, groupsResult, groupMembersResult, classroomsResult] = await Promise.all([
         supabase.from('profiles').select('display_name, role').eq('id', session.user.id).single(),
         supabase.from('school_classes').select('id, name, academic_year, archived').order('name'),
-        supabase.from('students').select('id, class_id, first_name, last_name').eq('active', true).order('last_name'),
+        supabase.from('students').select('id, class_id, first_name, last_name, gender').eq('active', true).order('last_name'),
         supabase.from('teacher_favorite_classes').select('class_id').eq('teacher_id', session.user.id),
         supabase.from('seating_plans').select('id, class_id, teaching_group_id, name, rows, cols, seat_type, mode, seats, avoid_pairs, activity_type, group_size, absent_students, updated_at').eq('teacher_id', session.user.id).order('updated_at', { ascending: false }),
         supabase.from('teaching_groups').select('id, teacher_id, name, updated_at').eq('teacher_id', session.user.id).order('name'),
@@ -360,6 +362,7 @@ function App() {
   const plannerStudents = useMemo(() => plannerTeachingGroup
     ? students.filter((student) => teachingGroupMembers.some((member) => member.group_id === plannerTeachingGroup.id && member.student_id === student.id)).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et'))
     : plannerClass ? students.filter((student) => student.class_id === plannerClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et')) : [], [plannerClass, plannerTeachingGroup, students, teachingGroupMembers])
+  const genderDataComplete = plannerStudents.length > 0 && plannerStudents.every((student) => student.gender === 'boy' || student.gender === 'girl')
   const filteredAbsenceStudents = useMemo(() => {
     const query = absenceSearch.trim().toLocaleLowerCase('et')
     return plannerStudents.filter((student) => !query || `${student.first_name} ${student.last_name}`.toLocaleLowerCase('et').includes(query))
@@ -477,7 +480,7 @@ function App() {
     setPlannerClass(schoolClass)
     const defaultClassroom = classroomLayouts.find((layout) => layout.is_default) || null
     if (defaultClassroom) applyClassroomLayout(defaultClassroom)
-    else applyClassroomLayout(null); setDrawMode('guided'); setActivityType('seating'); setGroupSize(4); setGroups([]); setGroupRuleSelection(new Set()); setGroupRuleSearch(''); setDraggedGroupMember(null); setAbsentStudentIds(new Set()); setAbsenceSearch(''); setSoloStudentIds(new Set()); setSoloSearch('')
+    else applyClassroomLayout(null); setDrawMode('guided'); setActivityType('seating'); setGroupSize(4); setGroups([]); setGroupRuleSelection(new Set()); setGroupRuleSearch(''); setDraggedGroupMember(null); setAbsentStudentIds(new Set()); setAbsenceSearch(''); setSoloStudentIds(new Set()); setSoloSearch(''); setPreferMixedGender(false)
     setAssignments([]); setLockedStudents(new Set()); setSeparationRules([]); setRuleFirst(''); setRuleSecond(''); setPlannerError(''); setEditingPlanId(null); setPlanName(`${schoolClass.name} isteplaan`)
   }
 
@@ -486,7 +489,7 @@ function App() {
     setPlannerClass({ id: group.id, name: group.name, academic_year: 'Õpperühm', archived: false })
     const defaultClassroom = classroomLayouts.find((layout) => layout.is_default) || null
     if (defaultClassroom) applyClassroomLayout(defaultClassroom)
-    else applyClassroomLayout(null); setDrawMode('guided'); setActivityType('seating'); setGroupSize(4); setGroups([]); setAbsentStudentIds(new Set())
+    else applyClassroomLayout(null); setDrawMode('guided'); setActivityType('seating'); setGroupSize(4); setGroups([]); setAbsentStudentIds(new Set()); setPreferMixedGender(false)
     setAssignments([]); setLockedStudents(new Set()); setSeparationRules([]); setRuleFirst(''); setRuleSecond(''); setPlannerError(''); setEditingPlanId(null); setPlanName(`${group.name} isteplaan`)
   }
 
@@ -529,6 +532,7 @@ function App() {
       presentIds.filter((id) => !assigned.has(id)).forEach((id) => { restoredGroups = addToSmallestAllowedGroup(restoredGroups, id, plan.avoid_pairs || []) })
       setGroups(restoredGroups)
       setSoloStudentIds(new Set())
+      setPreferMixedGender(false)
     } else setGroups([])
     setDisabledDesks(new Set(plan.seats.flatMap((seat, index) => seat.disabled ? [Math.floor(index / seatMultiplier)] : [])))
     setSeparationRules(plan.avoid_pairs || []); setLockedStudents(new Set()); setEditingPlanId(plan.id); setPlanName(plan.name); setPlannerError('')
@@ -628,6 +632,8 @@ function App() {
       .sort((first, second) => Math.floor(second / deskColumns) - Math.floor(first / deskColumns) || first - second)
     let candidate = base
     let found = false
+    let bestCandidate: (string | null)[] | null = null
+    let bestMixedScore = -1
     for (let attempt = 0; attempt < 2500; attempt += 1) {
       candidate = [...base]
       const blockedSeats = new Set<number>()
@@ -662,8 +668,22 @@ function App() {
         return deskMembers.length > 1 && deskMembers.some((id) => presentSoloIds.has(id))
       })
       if (soloConflict) continue
-      if (!violatesSeparation(candidate, separationRules, deskColumns, seatsPerDesk) && !violatesTogetherRules(candidate, separationRules, seatsPerDesk)) { found = true; break }
+      if (!violatesSeparation(candidate, separationRules, deskColumns, seatsPerDesk) && !violatesTogetherRules(candidate, separationRules, seatsPerDesk)) {
+        found = true
+        if (!preferMixedGender) break
+        const mixedScore = orderedDeskIndexes.reduce((score, deskIndex) => {
+          const deskMembers = candidate.slice(deskIndex * seatsPerDesk, deskIndex * seatsPerDesk + capacityForDesk(deskIndex)).filter((id): id is string => Boolean(id))
+          const boys = deskMembers.filter((id) => studentById.get(id)?.gender === 'boy').length
+          const girls = deskMembers.filter((id) => studentById.get(id)?.gender === 'girl').length
+          return score + (boys * girls)
+        }, 0)
+        if (mixedScore > bestMixedScore) {
+          bestMixedScore = mixedScore
+          bestCandidate = [...candidate]
+        }
+      }
     }
+    if (preferMixedGender && bestCandidate) candidate = bestCandidate
     if (!found) { setPlannerError('Selle lauapaigutuse ja valitud erisustega ei leidnud sobivat paigutust. Lisa kohti või muuda mõnda erisust.'); return }
     setAssignments(candidate); setLockedStudents(locked); setPlannerError('')
   }
@@ -848,7 +868,7 @@ function App() {
     if (classResult.error || !classResult.data) { setSavingClass(false); setDashboardError('Klassi lisamine ei õnnestunud. Kontrolli, kas sama klass on juba olemas.'); return }
     const newClass = classResult.data as SchoolClass
     if (parsedStudents.length) {
-      const studentsResult = await supabase.from('students').insert(parsedStudents.map((student) => ({ ...student, class_id: newClass.id }))).select('id, class_id, first_name, last_name')
+      const studentsResult = await supabase.from('students').insert(parsedStudents.map((student) => ({ ...student, class_id: newClass.id }))).select('id, class_id, first_name, last_name, gender')
       if (studentsResult.error) {
         await supabase.from('school_classes').delete().eq('id', newClass.id)
         setSavingClass(false); setDashboardError('Õpilaste lisamine ei õnnestunud ja klassi ei salvestatud.'); return
@@ -886,7 +906,7 @@ function App() {
       if (classesResult.error || !classesResult.data) throw new Error('Klasside salvestamine ei õnnestunud.')
       const createdClasses = classesResult.data as SchoolClass[]
       const idMap = new Map(createdClasses.map((item) => [`${item.academic_year}::${item.name.toLocaleLowerCase('et')}`, item.id]))
-      const studentsResult = await supabase.from('students').insert(rows.map((row) => ({ class_id: idMap.get(`${row.academicYear}::${row.className.toLocaleLowerCase('et')}`), first_name: row.first_name, last_name: row.last_name }))).select('id, class_id, first_name, last_name')
+      const studentsResult = await supabase.from('students').insert(rows.map((row) => ({ class_id: idMap.get(`${row.academicYear}::${row.className.toLocaleLowerCase('et')}`), first_name: row.first_name, last_name: row.last_name }))).select('id, class_id, first_name, last_name, gender')
       if (studentsResult.error) {
         await supabase.from('school_classes').delete().in('id', createdClasses.map((item) => item.id))
         throw new Error('Õpilaste salvestamine ei õnnestunud. Import tühistati.')
@@ -905,13 +925,13 @@ function App() {
     const members = students.filter((student) => student.class_id === schoolClass.id).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'et'))
     setEditClassName(schoolClass.name)
     setEditAcademicYear(schoolClass.academic_year)
-    setEditMembers(members.map(({ id, first_name, last_name }) => ({ id, first_name, last_name })))
+    setEditMembers(members.map(({ id, first_name, last_name, gender }) => ({ id, first_name, last_name, gender })))
     setEditError('')
     setSelectedClass(null)
     setEditingClass(schoolClass)
   }
 
-  function updateMember(index: number, field: 'first_name' | 'last_name', value: string) {
+  function updateMember(index: number, field: 'first_name' | 'last_name' | 'gender', value: string | StudentGender | null) {
     setEditMembers((current) => current.map((member, memberIndex) => memberIndex === index ? { ...member, [field]: value } : member))
   }
 
@@ -934,8 +954,8 @@ function App() {
     const newMembers = editMembers.filter((member) => !member.id)
 
     const memberOperations = await Promise.all([
-      ...existingMembers.map((member) => client.from('students').update({ first_name: member.first_name.trim(), last_name: member.last_name.trim() }).eq('id', member.id).select('id, class_id, first_name, last_name').single()),
-      ...(newMembers.length ? [client.from('students').insert(newMembers.map((member) => ({ class_id: editingClass.id, first_name: member.first_name.trim(), last_name: member.last_name.trim() }))).select('id, class_id, first_name, last_name')] : []),
+      ...existingMembers.map((member) => client.from('students').update({ first_name: member.first_name.trim(), last_name: member.last_name.trim(), gender: member.gender }).eq('id', member.id).select('id, class_id, first_name, last_name, gender').single()),
+      ...(newMembers.length ? [client.from('students').insert(newMembers.map((member) => ({ class_id: editingClass.id, first_name: member.first_name.trim(), last_name: member.last_name.trim(), gender: member.gender }))).select('id, class_id, first_name, last_name, gender')] : []),
       ...(removedIds.length ? [client.from('students').delete().in('id', removedIds)] : []),
     ])
 
@@ -943,7 +963,7 @@ function App() {
       setSavingEdits(false); setEditError('Kõiki õpilaste muudatusi ei õnnestunud salvestada. Värskenda lehte ja kontrolli nimekirja.'); return
     }
 
-    const refreshedStudents = await client.from('students').select('id, class_id, first_name, last_name').eq('class_id', editingClass.id).eq('active', true).order('last_name')
+    const refreshedStudents = await client.from('students').select('id, class_id, first_name, last_name, gender').eq('class_id', editingClass.id).eq('active', true).order('last_name')
     const updatedClass = { ...editingClass, name: editClassName.trim(), academic_year: editAcademicYear.trim() }
     setClasses((current) => current.map((item) => item.id === editingClass.id ? updatedClass : item).sort((a, b) => a.name.localeCompare(b.name, 'et')))
     setStudents((current) => [...current.filter((student) => student.class_id !== editingClass.id), ...((refreshedStudents.data || []) as Student[])])
@@ -1162,7 +1182,7 @@ function App() {
 
       {showProfile && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowProfile(false)}><section className="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title"><div className="modal-header"><div><span className="eyebrow">Minu konto</span><h2 id="profile-title">Kuvatav nimi</h2><p>Seda nime näed rakenduse ülaservas.</p></div><button className="icon-button" onClick={() => setShowProfile(false)}>×</button></div><form onSubmit={saveProfileName}><div className="field"><label htmlFor="profile-name">Nimi</label><input id="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} minLength={2} maxLength={100} required /></div>{profileError && <div className="notice notice--error">{profileError}</div>}<div className="modal-actions"><button type="button" className="button button--ghost" onClick={() => setShowProfile(false)}>Loobu</button><button className="button" disabled={savingProfile}>{savingProfile ? 'Salvestan…' : 'Salvesta nimi'}</button></div></form></section></div>}
 
-      {showHelp && <div className="modal-backdrop help-backdrop--current" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHelp(false)}><section className="modal help-modal help-modal--current" role="dialog" aria-modal="true" aria-labelledby="current-help-title"><div className="modal-header"><div><span className="eyebrow">Täielik juhend</span><h2 id="current-help-title">Kuidas rakendust kasutada?</h2></div><button className="icon-button" onClick={() => setShowHelp(false)}>×</button></div><div className="help-tabs help-tabs--five" role="tablist"><button className={helpSection === 'seating' ? 'active' : ''} onClick={() => setHelpSection('seating')}>🪑 Istekohad</button><button className={helpSection === 'groups' ? 'active' : ''} onClick={() => setHelpSection('groups')}>👥 Rühmatöö</button><button className={helpSection === 'teaching-groups' ? 'active' : ''} onClick={() => setHelpSection('teaching-groups')}>📚 Õpperühmad</button><button className={helpSection === 'classrooms' ? 'active' : ''} onClick={() => setHelpSection('classrooms')}>🏫 Klassiruumid</button><button className={helpSection === 'communications' ? 'active' : ''} onClick={() => setHelpSection('communications')}>🔔 Teated</button></div>{helpSection === 'seating' && <ol className="help-steps"><li><b>Vali klass või õpperühm.</b><span>Ava vajalik nimekiri ja vali töövormiks „Istumiskohad“.</span></li><li><b>Märgi puudujad ja üksinda istujad.</b><span>Puudujad jäetakse loosist välja. Mitmekohaliste laudade puhul saad märkida õpilased, kes peavad üksi istuma.</span></li><li><b>Vali klassiruum.</b><span>Vaikeklassiruum rakendub automaatselt. Vajaduse korral vali rippmenüüst mõni teine salvestatud ruum või „Kohandatud paigutus“.</span></li><li><b>Kohanda lauapaigutust.</b><span>Vali üksikud, paaris- või hübriidlauad. Hübriidvaates muuda iga laud ühe-, kahe- või kolmekohaliseks ning eemalda üleliigsed lauad. Salvestatud ruumi muutmisel käsitletakse seda selle plaani kohandatud paigutusena.</span></li><li><b>Vali juhuslik või juhitud loos.</b><span>Juhitud loosis saad nimesid lohistada, kohti lukustada ja ülejäänud uuesti loosida.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Määra õpilased, kes ei tohi istuda koos ega lähestikku, ning paarid, kes peavad kindlasti koos istuma.</span></li><li><b>Salvesta, esitle või ekspordi.</b><span>PDF-i saad eksportida kohe eelvaatest; klassivaadet pole selleks vaja avada. PDF mahutatakse ühele horisontaalsele A4-lehele.</span></li></ol>}{helpSection === 'groups' && <ol className="help-steps"><li><b>Vali klass või õpperühm ja „Rühmatöö“.</b><span>Rühmade loosimine ei sõltu klassiruumi laudade paigutusest.</span></li><li><b>Märgi puudujad ja rühma suurus.</b><span>Puudujad jäetakse loosist välja ning liikmed jagatakse võimalikult tasakaalustatult.</span></li><li><b>Vali juhuslik või juhitud loos.</b><span>Juhitud loosis saad pärast nimesid rühmade vahel lohistada.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Koosta nimistud õpilastest, kes ei tohi samasse rühma sattuda.</span></li><li><b>Loosi ja kohanda.</b><span>Piirangut rikkuvat lohistamist ei lubata. Tagasitulev puuduja lisatakse väikseimasse sobivasse rühma.</span></li><li><b>Salvesta või ekspordi.</b><span>Rühmad saad salvestada, klassivaates esitleda või kohe eelvaatest ühe A4-lehena PDF-i eksportida.</span></li></ol>}{helpSection === 'teaching-groups' && <ol className="help-steps"><li><b>Ava avalehel „Õpperühmad“.</b><span>Õpperühmad on õpetaja enda privaatsed nimekirjad.</span></li><li><b>Vali „Loo õpperühm“.</b><span>Anna rühmale selge nimi, näiteks „8.a ja 8.b inglise keel – I rühm“.</span></li><li><b>Vali üks või mitu klassi.</b><span>Pärast klasside valimist kuvatakse nende õpilased.</span></li><li><b>Vali rühma liikmed.</b><span>Kasuta otsingut ja märgi õpilased, kes päriselt selles tunnirühmas osalevad.</span></li><li><b>Salvesta ja kasuta.</b><span>Õpperühmale saab teha kõik samad isteplaanid, rühmade loosid, erisused ja PDF-id nagu tervele klassile.</span></li><li><b>Muuda vajaduse korral.</b><span>Ava õpperühm ning vali „Muuda rühma“. Sealt saad nime või liikmeid muuta.</span></li></ol>}{helpSection === 'classrooms' && <ol className="help-steps"><li><b>Ava avalehel „Minu klassiruumid“.</b><span>Siin saad salvestada oma tavapärased lauapaigutused, et neid ei peaks iga klassi puhul uuesti koostama.</span></li><li><b>Vali „Lisa klassiruum“.</b><span>Anna ruumile äratuntav nimi, näiteks „Klass 220“ või „Keemiaklass“.</span></li><li><b>Seadista lauad.</b><span>Vali üksik-, paaris- või hübriidlauad ning määra ridade ja veergude arv. Eemalda puuduvad lauad; hübriidpaigutuses määra igale lauale 1–3 kohta.</span></li><li><b>Määra vaikeklassiruum.</b><span>Vaikeseadeks märgitud ruum valitakse iga uue isteplaani alustamisel automaatselt. Vaikeseadet saab klassiruumide lehel hiljem muuta.</span></li><li><b>Muuda või kustuta.</b><span>Salvestatud klassiruumi saad alati muuta või kustutada. Muudatus mõjutab järgmisi uusi plaane, kuid ei muuda juba salvestatud isteplaane.</span></li><li><b>Kasuta isteplaanis.</b><span>Isteplaani jaotises „1. Klassiruum“ saad valida mõne teise salvestatud ruumi või teha ainult selle plaani jaoks kohandatud paigutuse.</span></li><li><b>Privaatsus.</b><span>„Minu klassiruumid“ on seotud sinu õpetajakontoga ning teised õpetajad sinu salvestatud ruume ei näe.</span></li></ol>}{helpSection === 'communications' && <ol className="help-steps"><li><b>Vaata teateid kellukese alt.</b><span>Uue teate korral kuvatakse kellukesel lugemata teadete arv. Kellukese avamisel märgitakse teated loetuks.</span></li><li><b>Teated on ainult veebis.</b><span>Isteplaani teated ei saada e-kirju ega muid väliseid märguandeid.</span></li><li><b>Anna tagasisidet.</b><span>Vali ülaservas „Tagasiside“, seejärel märgi, kas tegemist on probleemi, arendusidee või muu tagasisidega.</span></li><li><b>Kirjelda võimalikult täpselt.</b><span>Probleemi puhul lisa, mida tegid ja mis juhtus. Arendusidee puhul kirjelda, mida uus võimalus aitaks õpetajal teha.</span></li><li><b>Administraatori tööriistad.</b><span>Administraator saab kellukese alt kõigile veebiteate avaldada ning nupu „Sisend“ kaudu kasutajate tagasisidet vaadata ja selle olekut muuta.</span></li></ol>}<div className="modal-actions"><button className="button" onClick={() => setShowHelp(false)}>Selge</button></div></section></div>}
+      {showHelp && <div className="modal-backdrop help-backdrop--current" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHelp(false)}><section className="modal help-modal help-modal--current" role="dialog" aria-modal="true" aria-labelledby="current-help-title"><div className="modal-header"><div><span className="eyebrow">Täielik juhend</span><h2 id="current-help-title">Kuidas rakendust kasutada?</h2></div><button className="icon-button" onClick={() => setShowHelp(false)}>×</button></div><div className="help-tabs help-tabs--five" role="tablist"><button className={helpSection === 'seating' ? 'active' : ''} onClick={() => setHelpSection('seating')}>🪑 Istekohad</button><button className={helpSection === 'groups' ? 'active' : ''} onClick={() => setHelpSection('groups')}>👥 Rühmatöö</button><button className={helpSection === 'teaching-groups' ? 'active' : ''} onClick={() => setHelpSection('teaching-groups')}>📚 Õpperühmad</button><button className={helpSection === 'classrooms' ? 'active' : ''} onClick={() => setHelpSection('classrooms')}>🏫 Klassiruumid</button><button className={helpSection === 'communications' ? 'active' : ''} onClick={() => setHelpSection('communications')}>🔔 Teated</button></div>{helpSection === 'seating' && <ol className="help-steps"><li><b>Vali klass või õpperühm.</b><span>Ava vajalik nimekiri ja vali töövormiks „Istumiskohad“.</span></li><li><b>Märgi puudujad ja üksinda istujad.</b><span>Puudujad jäetakse loosist välja. Mitmekohaliste laudade puhul saad märkida õpilased, kes peavad üksi istuma.</span></li><li><b>Vali klassiruum.</b><span>Vaikeklassiruum rakendub automaatselt. Vajaduse korral vali rippmenüüst mõni teine salvestatud ruum või „Kohandatud paigutus“.</span></li><li><b>Kohanda lauapaigutust.</b><span>Vali üksikud, paaris- või hübriidlauad. Hübriidvaates muuda iga laud ühe-, kahe- või kolmekohaliseks ning eemalda üleliigsed lauad. Salvestatud ruumi muutmisel käsitletakse seda selle plaani kohandatud paigutusena.</span></li><li><b>Vali juhuslik või juhitud loos.</b><span>Juhitud loosis saad nimesid lohistada, kohti lukustada ja ülejäänud uuesti loosida. Kui admin on kogu klassile soo määranud, saab lisaks eelistada poiss–tüdruk paare.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Määra õpilased, kes ei tohi istuda koos ega lähestikku, ning paarid, kes peavad kindlasti koos istuma.</span></li><li><b>Salvesta, esitle või ekspordi.</b><span>PDF-i saad eksportida kohe eelvaatest; klassivaadet pole selleks vaja avada. PDF mahutatakse ühele horisontaalsele A4-lehele.</span></li></ol>}{helpSection === 'groups' && <ol className="help-steps"><li><b>Vali klass või õpperühm ja „Rühmatöö“.</b><span>Rühmade loosimine ei sõltu klassiruumi laudade paigutusest.</span></li><li><b>Märgi puudujad ja rühma suurus.</b><span>Puudujad jäetakse loosist välja ning liikmed jagatakse võimalikult tasakaalustatult.</span></li><li><b>Vali juhuslik või juhitud loos.</b><span>Juhitud loosis saad pärast nimesid rühmade vahel lohistada.</span></li><li><b>Lisa vajaduse korral erisused.</b><span>Koosta nimistud õpilastest, kes ei tohi samasse rühma sattuda.</span></li><li><b>Loosi ja kohanda.</b><span>Piirangut rikkuvat lohistamist ei lubata. Tagasitulev puuduja lisatakse väikseimasse sobivasse rühma.</span></li><li><b>Salvesta või ekspordi.</b><span>Rühmad saad salvestada, klassivaates esitleda või kohe eelvaatest ühe A4-lehena PDF-i eksportida.</span></li></ol>}{helpSection === 'teaching-groups' && <ol className="help-steps"><li><b>Ava avalehel „Õpperühmad“.</b><span>Õpperühmad on õpetaja enda privaatsed nimekirjad.</span></li><li><b>Vali „Loo õpperühm“.</b><span>Anna rühmale selge nimi, näiteks „8.a ja 8.b inglise keel – I rühm“.</span></li><li><b>Vali üks või mitu klassi.</b><span>Pärast klasside valimist kuvatakse nende õpilased.</span></li><li><b>Vali rühma liikmed.</b><span>Kasuta otsingut ja märgi õpilased, kes päriselt selles tunnirühmas osalevad.</span></li><li><b>Salvesta ja kasuta.</b><span>Õpperühmale saab teha kõik samad isteplaanid, rühmade loosid, erisused ja PDF-id nagu tervele klassile.</span></li><li><b>Muuda vajaduse korral.</b><span>Ava õpperühm ning vali „Muuda rühma“. Sealt saad nime või liikmeid muuta.</span></li></ol>}{helpSection === 'classrooms' && <ol className="help-steps"><li><b>Ava avalehel „Minu klassiruumid“.</b><span>Siin saad salvestada oma tavapärased lauapaigutused, et neid ei peaks iga klassi puhul uuesti koostama.</span></li><li><b>Vali „Lisa klassiruum“.</b><span>Anna ruumile äratuntav nimi, näiteks „Klass 220“ või „Keemiaklass“.</span></li><li><b>Seadista lauad.</b><span>Vali üksik-, paaris- või hübriidlauad ning määra ridade ja veergude arv. Eemalda puuduvad lauad; hübriidpaigutuses määra igale lauale 1–3 kohta.</span></li><li><b>Määra vaikeklassiruum.</b><span>Vaikeseadeks märgitud ruum valitakse iga uue isteplaani alustamisel automaatselt. Vaikeseadet saab klassiruumide lehel hiljem muuta.</span></li><li><b>Muuda või kustuta.</b><span>Salvestatud klassiruumi saad alati muuta või kustutada. Muudatus mõjutab järgmisi uusi plaane, kuid ei muuda juba salvestatud isteplaane.</span></li><li><b>Kasuta isteplaanis.</b><span>Isteplaani jaotises „1. Klassiruum“ saad valida mõne teise salvestatud ruumi või teha ainult selle plaani jaoks kohandatud paigutuse.</span></li><li><b>Privaatsus.</b><span>„Minu klassiruumid“ on seotud sinu õpetajakontoga ning teised õpetajad sinu salvestatud ruume ei näe.</span></li></ol>}{helpSection === 'communications' && <ol className="help-steps"><li><b>Vaata teateid kellukese alt.</b><span>Uue teate korral kuvatakse kellukesel lugemata teadete arv. Kellukese avamisel märgitakse teated loetuks.</span></li><li><b>Teated on ainult veebis.</b><span>Isteplaani teated ei saada e-kirju ega muid väliseid märguandeid.</span></li><li><b>Anna tagasisidet.</b><span>Vali ülaservas „Tagasiside“, seejärel märgi, kas tegemist on probleemi, arendusidee või muu tagasisidega.</span></li><li><b>Kirjelda võimalikult täpselt.</b><span>Probleemi puhul lisa, mida tegid ja mis juhtus. Arendusidee puhul kirjelda, mida uus võimalus aitaks õpetajal teha.</span></li><li><b>Administraatori tööriistad.</b><span>Administraator saab kellukese alt kõigile veebiteate avaldada ning nupu „Sisend“ kaudu kasutajate tagasisidet vaadata ja selle olekut muuta.</span></li></ol>}<div className="modal-actions"><button className="button" onClick={() => setShowHelp(false)}>Selge</button></div></section></div>}
 
       {showArchive && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowArchive(false)}><section className="modal archive-modal" role="dialog" aria-modal="true" aria-labelledby="archive-title"><div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="archive-title">Klasside arhiiv</h2><p>Arhiveerimine peidab klassi töölaudade vaates, kuid säilitab nimekirja ja plaanid.</p></div><button className="icon-button" onClick={() => setShowArchive(false)}>×</button></div>{archivedClasses.length ? <div className="archive-list">{archivedClasses.map((schoolClass) => <div key={schoolClass.id}><span><strong>{schoolClass.name}</strong><small>{schoolClass.academic_year} · {studentCountByClass[schoolClass.id] || 0} õpilast</small></span><button onClick={() => setClassArchived(schoolClass, false)}>Taasta</button><button className="danger-action" onClick={() => permanentlyDeleteClass(schoolClass)}>Kustuta lõplikult</button></div>)}</div> : <div className="mini-empty">Arhiiv on tühi.</div>}</section></div>}
 
@@ -1220,6 +1240,8 @@ function App() {
             <div className="control-divider" />
             <div><span className="eyebrow">2. Loosimine</span><h2>Vali meetod</h2></div>
             <div className="option-grid"><button className={drawMode === 'random' ? 'active' : ''} onClick={() => setDrawMode('random')}><strong>🎲 Juhuslik</strong><span>Kõik kohad loositakse</span></button><button className={drawMode === 'guided' ? 'active' : ''} onClick={() => setDrawMode('guided')}><strong>🎯 Juhitud</strong><span>Lukusta valitud kohad</span></button></div>
+
+            {deskType !== 'single' && genderDataComplete && <label className={`mixed-gender-toggle ${preferMixedGender ? 'active' : ''}`}><input type="checkbox" checked={preferMixedGender} onChange={(event) => { setPreferMixedGender(event.target.checked); setAssignments([]); setLockedStudents(new Set()); setPlannerError('') }} /><span><strong>⚥ Eelista poiss–tüdruk paare</strong><small>Loos teeb võimalikult palju segapaare, kuid arvestab enne kõiki teisi erisusi.</small></span></label>}
 
             {deskType !== 'single' && <details className="absence-picker solo-picker"><summary>Soovib üksi istuda <span>{soloStudentIds.size}</span></summary><div><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={soloSearch} onChange={(event) => setSoloSearch(event.target.value)} />{filteredSoloStudents.map((student) => <label key={student.id}><input type="checkbox" checked={soloStudentIds.has(student.id)} onChange={() => { setSoloStudentIds((current) => { const next = new Set(current); next.has(student.id) ? next.delete(student.id) : next.add(student.id); return next }); setAssignments([]); setLockedStudents(new Set()); setPlannerError('') }} /><span>{student.first_name} {student.last_name}</span></label>)}</div></details>}
 
@@ -1292,8 +1314,8 @@ function App() {
         <div className="modal-header"><div><span className="eyebrow">Administraator</span><h2 id="edit-class-title">Muuda klassi</h2><p>Paranda klassi andmeid ja õpilaste nimekirja.</p></div><button className="icon-button" onClick={() => setEditingClass(null)} aria-label="Sulge">×</button></div>
         <form onSubmit={saveClassEdits}>
           <div className="field-row"><div className="field"><label htmlFor="edit-class-name">Klassi nimi</label><input id="edit-class-name" value={editClassName} onChange={(event) => setEditClassName(event.target.value)} required /></div><div className="field"><label htmlFor="edit-academic-year">Õppeaasta</label><input id="edit-academic-year" value={editAcademicYear} onChange={(event) => setEditAcademicYear(event.target.value)} required /></div></div>
-          <div className="member-editor-header"><div><strong>Õpilased</strong><span>{editMembers.length} nimekirjas</span></div><button className="template-button" type="button" onClick={() => setEditMembers((current) => [...current, { first_name: '', last_name: '' }])}>+ Lisa õpilane</button></div>
-          <div className="member-editor">{editMembers.map((member, index) => <div className="member-row" key={member.id || `new-${index}`}><span>{index + 1}</span><input aria-label={`Õpilase ${index + 1} eesnimi`} value={member.first_name} onChange={(event) => updateMember(index, 'first_name', event.target.value)} placeholder="Eesnimi" required /><input aria-label={`Õpilase ${index + 1} perekonnanimi`} value={member.last_name} onChange={(event) => updateMember(index, 'last_name', event.target.value)} placeholder="Perekonnanimi" required /><button type="button" onClick={() => setEditMembers((current) => current.filter((_, memberIndex) => memberIndex !== index))} aria-label={`Eemalda ${member.first_name} ${member.last_name}`}>×</button></div>)}</div>
+          <div className="member-editor-header"><div><strong>Õpilased</strong><span>{editMembers.length} nimekirjas · sugu on vabatahtlik</span></div><button className="template-button" type="button" onClick={() => setEditMembers((current) => [...current, { first_name: '', last_name: '', gender: null }])}>+ Lisa õpilane</button></div>
+          <div className="member-editor">{editMembers.map((member, index) => <div className="member-row" key={member.id || `new-${index}`}><span>{index + 1}</span><input aria-label={`Õpilase ${index + 1} eesnimi`} value={member.first_name} onChange={(event) => updateMember(index, 'first_name', event.target.value)} placeholder="Eesnimi" required /><input aria-label={`Õpilase ${index + 1} perekonnanimi`} value={member.last_name} onChange={(event) => updateMember(index, 'last_name', event.target.value)} placeholder="Perekonnanimi" required /><select aria-label={`Õpilase ${index + 1} sugu`} value={member.gender || ''} onChange={(event) => updateMember(index, 'gender', (event.target.value || null) as StudentGender | null)}><option value="">Määramata</option><option value="boy">Poiss</option><option value="girl">Tüdruk</option></select><button type="button" onClick={() => setEditMembers((current) => current.filter((_, memberIndex) => memberIndex !== index))} aria-label={`Eemalda ${member.first_name} ${member.last_name}`}>×</button></div>)}</div>
           {editError && <div className="notice notice--error" role="alert">{editError}</div>}
           <div className="modal-actions"><button className="button button--ghost" type="button" onClick={() => setEditingClass(null)}>Loobu</button><button className="button" type="submit" disabled={savingEdits}>{savingEdits ? 'Salvestan…' : 'Salvesta muudatused'}</button></div>
         </form>
