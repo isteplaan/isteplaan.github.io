@@ -293,8 +293,10 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .desk-placeholder { min-height: 82px; border: 2px dashed #c8d5cc; border-radius: 10px; background: rgba(255,255,255,.35); color: #8a9890; cursor: pointer; }
 .desk-placeholder:hover { border-color: #6f9b86; background: #f7faf8; color: #27634f; }
 .desk-placeholder span { font-size: 11px; font-weight: 700; }
-.seat { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 9px 5px; overflow: hidden; border-right: 1px dashed rgba(91, 62, 25, .28); color: #2e291f; text-align: center; cursor: grab; }
+.seat { position: relative; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 18px 5px 8px; overflow: hidden; border-right: 1px dashed rgba(91, 62, 25, .28); color: #2e291f; text-align: center; cursor: grab; }
 .seat:last-child { border-right: 0; }
+.seat-number { position: absolute; z-index: 1; top: 4px; left: 5px; min-width: 17px; height: 17px; display: grid; place-items: center; padding: 0 4px; border-radius: 999px; background: rgba(255,255,255,.72); color: #76552d; font-size: 9px; font-weight: 900; line-height: 1; box-shadow: 0 1px 3px rgba(67,48,25,.15); pointer-events: none; }
+.seat:last-child .seat-number { right: 5px; left: auto; }
 .seat > span { min-width: 0; display: grid; font-weight: 800; font-size: 13px; line-height: 1.15; }
 .seat small { overflow: hidden; margin-top: 3px; color: #655137; font-size: 10px; font-weight: 600; text-overflow: ellipsis; }
 .seat button { flex: 0 0 auto; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 8px; background: rgba(255,255,255,.42); cursor: pointer; }
