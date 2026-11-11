@@ -1323,7 +1323,7 @@ function App() {
                 const settled = orderIndex >= 0 && orderIndex < revealCount
                 const rollingStudent = plannerStudents.length ? plannerStudents[(animationTick + seatIndex * 3) % plannerStudents.length] : null
                 const visibleStudent = settled ? student : drawing ? rollingStudent : null
-                return <div className={`presentation-seat ${settled ? 'presentation-seat--settled' : drawing ? 'presentation-seat--rolling' : ''}`} key={seatIndex}>{visibleStudent && <><strong>{visibleStudent.first_name}</strong><span>{visibleStudent.last_name}</span></>}</div>
+                return <div className={`presentation-seat ${settled ? 'presentation-seat--settled' : drawing ? 'presentation-seat--rolling' : ''}`} key={seatIndex}><b className="presentation-seat-number">{seatNumberByColumn(deskIndex, position, deskRows, deskColumns, disabledDesks, capacityForDesk)}</b>{visibleStudent && <><strong>{visibleStudent.first_name}</strong><span>{visibleStudent.last_name}</span></>}</div>
               })}
             </div>)}
           </div><div className="presentation-board">TAHVEL</div></>}
