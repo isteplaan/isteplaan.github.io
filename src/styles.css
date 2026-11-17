@@ -372,10 +372,10 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .presentation-seat span { margin-top: 2px; color: #5b472e; font-size: clamp(11px, 1vw, 15px); }
 .presentation-seat--rolling { color: #79603e; filter: blur(.35px); }
 .presentation-seat--settled { animation: settle-seat .48s cubic-bezier(.2,.9,.25,1.2); background: rgba(255,247,219,.56); }
-.presentation-groups { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-content: center; gap: 20px; }
-.presentation-groups article { overflow: hidden; border: 2px solid #cbd9cf; border-radius: 16px; background: #fff; box-shadow: 0 12px 30px rgba(23,56,47,.09); }
-.presentation-groups h2 { margin: 0; padding: 13px 16px; background: #27634f; color: #fff; font-size: 20px; }
-.presentation-groups span { min-height: 43px; display: block; padding: 11px 16px; border-bottom: 1px solid #e5ebe7; font-size: 17px; font-weight: 700; }
+.presentation-groups { width: min(1500px, 100%); flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-content: center; gap: 24px; margin: 0 auto; }
+.presentation-groups article { min-height: 230px; overflow: hidden; border: 2px solid #cbd9cf; border-radius: 18px; background: #fff; box-shadow: 0 16px 38px rgba(23,56,47,.11); }
+.presentation-groups h2 { margin: 0; padding: 16px 20px; background: #27634f; color: #fff; font-size: clamp(22px, 1.5vw, 28px); }
+.presentation-groups span { min-height: 52px; display: flex; align-items: center; padding: 13px 20px; border-bottom: 1px solid #e5ebe7; font-size: clamp(18px, 1.15vw, 22px); font-weight: 700; line-height: 1.25; }
 .presentation-groups .group-member--settled { animation: settle-seat .48s cubic-bezier(.2,.9,.25,1.2); background: #f4f8f5; }
 @keyframes settle-seat { 0% { transform: scale(.72); opacity: .25; } 65% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
 .presentation-board { width: min(68%, 760px); height: 48px; display: grid; place-items: center; margin: 34px auto 0; border: 6px solid #684527; border-radius: 5px; background: #254a40; color: rgba(255,255,255,.8); box-shadow: 0 6px 0 #432b18; font-weight: 800; letter-spacing: .25em; }
