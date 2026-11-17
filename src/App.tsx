@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 
@@ -235,6 +236,8 @@ function App() {
   const [ruleFirst, setRuleFirst] = useState('')
   const [ruleSecond, setRuleSecond] = useState('')
   const [separationRadius, setSeparationRadius] = useState(1)
+  const [plannerSidebarWidth, setPlannerSidebarWidth] = useState(410)
+  const [resizingPlannerSidebar, setResizingPlannerSidebar] = useState(false)
   const [togetherFirst, setTogetherFirst] = useState('')
   const [togetherSecond, setTogetherSecond] = useState('')
   const [plannerError, setPlannerError] = useState('')
@@ -404,14 +407,15 @@ function App() {
     const query = groupRuleSearch.trim().toLocaleLowerCase('et')
     return plannerStudents.filter((student) => !absentStudentIds.has(student.id) && (!query || `${student.first_name} ${student.last_name}`.toLocaleLowerCase('et').includes(query)))
   }, [absentStudentIds, groupRuleSearch, plannerStudents])
+  const pairSeparationRules = useMemo(() => separationRules.filter((rule) => rule.kind !== 'together' && !rule.setId), [separationRules])
   const groupRestrictionSets = useMemo(() => {
     const grouped = new Map<string, Set<string>>()
-    separationRules.filter((rule) => rule.kind !== 'together').forEach((rule, index) => {
-      const key = rule.setId || `pair-${index}`
+    separationRules.filter((rule) => rule.kind !== 'together' && rule.setId).forEach((rule) => {
+      const key = rule.setId!
       if (!grouped.has(key)) grouped.set(key, new Set())
       grouped.get(key)!.add(rule.firstId); grouped.get(key)!.add(rule.secondId)
     })
-    return [...grouped.entries()].map(([id, members]) => ({ id, members: [...members], radius: separationRules.find((rule, index) => (rule.setId || `pair-${index}`) === id)?.radius ?? 1 }))
+    return [...grouped.entries()].map(([id, members]) => ({ id, members: [...members], radius: separationRules.find((rule) => rule.setId === id)?.radius ?? 1 }))
   }, [separationRules])
   const studentById = useMemo(() => new Map(plannerStudents.map((student) => [student.id, student])), [plannerStudents])
   const seatsPerDesk = deskType === 'mixed' ? 3 : deskType === 'pair' ? 2 : 1
@@ -433,6 +437,20 @@ function App() {
       return rowDifference || firstDesk - secondDesk || first - second
     }), [assignments, deskCapacities, deskColumns, deskType, disabledDesks, seatsPerDesk, totalSeatSlots])
   const presentationItemCount = activityType === 'groups' ? groups.flat().length : revealOrder.length
+
+  useEffect(() => {
+    if (!resizingPlannerSidebar) return
+    const move = (event: PointerEvent) => setPlannerSidebarWidth(Math.max(340, Math.min(560, event.clientX)))
+    const stop = () => setResizingPlannerSidebar(false)
+    document.body.classList.add('planner-sidebar-resizing')
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+    return () => {
+      document.body.classList.remove('planner-sidebar-resizing')
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+  }, [resizingPlannerSidebar])
 
   useEffect(() => {
     if (!drawing) return
@@ -731,6 +749,17 @@ function App() {
         return addToSmallestAllowedGroup(current, studentId, separationRules)
       })
     } else { setAssignments([]); setGroups([]); setLockedStudents(new Set()) }
+  }
+
+  function addSeparationPair() {
+    if (!ruleFirst || !ruleSecond || ruleFirst === ruleSecond) { setPlannerError('Vali kaks erinevat õpilast.'); return }
+    const samePair = (rule: SeparationRule) => [rule.firstId, rule.secondId].includes(ruleFirst) && [rule.firstId, rule.secondId].includes(ruleSecond)
+    if (separationRules.some((rule) => samePair(rule))) {
+      setPlannerError(separationRules.some((rule) => rule.kind === 'together' && samePair(rule)) ? 'Sama paar on juba märgitud koos istuma. Eemalda enne vastuoluline soov.' : 'See paar on juba lahus hoidmise piiranguna lisatud.')
+      return
+    }
+    setSeparationRules((current) => [...current, { firstId: ruleFirst, secondId: ruleSecond, kind: 'apart', radius: separationRadius }])
+    setRuleFirst(''); setRuleSecond(''); setAssignments([]); setGroups([]); setLockedStudents(new Set()); setPlannerError('')
   }
 
   function addSeparationSet() {
@@ -1266,7 +1295,7 @@ function App() {
 
       {plannerClass && <div className="planner-page">
         <header className="planner-topbar"><div><button className="back-button" onClick={() => setPlannerClass(null)}>← Tagasi</button><span>{plannerClass.name} · {plannerStudents.length} õpilast</span></div><strong>Isteplaani koostaja</strong></header>
-        <main className="planner-layout">
+        <main className="planner-layout" style={{ '--planner-sidebar-width': `${plannerSidebarWidth}px` } as CSSProperties}>
           <aside className="planner-controls">
             <div><span className="eyebrow">Töövorm</span><h2>Mida loosime?</h2></div>
             <div className="option-grid"><button className={activityType === 'seating' ? 'active' : ''} onClick={() => { setActivityType('seating'); setGroups([]) }}><strong>🪑 Istumiskohad</strong><span>Paiguta õpilased klassiruumi</span></button><button className={activityType === 'groups' ? 'active' : ''} onClick={() => { setActivityType('groups'); setAssignments([]); setLockedStudents(new Set()) }}><strong>👥 Rühmatöö</strong><span>Loosi tasakaalustatud rühmad</span></button></div>
@@ -1288,11 +1317,11 @@ function App() {
             {deskType !== 'single' && <details className="absence-picker solo-picker"><summary>Soovib üksi istuda <span>{soloStudentIds.size}</span></summary><div><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={soloSearch} onChange={(event) => setSoloSearch(event.target.value)} />{filteredSoloStudents.map((student) => <label key={student.id}><input type="checkbox" checked={soloStudentIds.has(student.id)} onChange={() => { setSoloStudentIds((current) => { const next = new Set(current); next.has(student.id) ? next.delete(student.id) : next.add(student.id); return next }); setAssignments([]); setLockedStudents(new Set()); setPlannerError('') }} /><span>{student.first_name} {student.last_name}</span></label>)}</div></details>}
 
             <div className="control-divider" />
-            <div><span className="eyebrow">3. Piirangud</span><h2>Hoia seltskond lahus</h2><p className="control-help">Vali terve seltskond. Arvuti hoiab kõik selle liikmed määratud raadiuses üksteisest eemal ja otsib võimalikult hajutatud paigutuse.</p></div>
-            <details className="absence-picker group-rule-picker" open><summary>Valitud õpilased <span>{groupRuleSelection.size}</span></summary><div><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={groupRuleSearch} onChange={(event) => setGroupRuleSearch(event.target.value)} />{filteredGroupRuleStudents.map((student) => <label key={student.id}><input type="checkbox" checked={groupRuleSelection.has(student.id)} onChange={() => setGroupRuleSelection((current) => { const next = new Set(current); next.has(student.id) ? next.delete(student.id) : next.add(student.id); return next })} /><span>{student.first_name} {student.last_name}</span></label>)}</div></details>
+            <div><span className="eyebrow">3. Piirangud</span><h2>Hoia õpilased lahus</h2><p className="control-help">Lisa kiire paar või vali terve seltskond. Arvuti hoiab nad määratud raadiuses üksteisest eemal ja otsib võimalikult hajutatud paigutuse.</p></div>
             <label className="separation-radius-field"><span>Minimaalne vahe</span><select value={separationRadius} onChange={(event) => setSeparationRadius(Number(event.target.value))}><option value={1}>1 laua raadius</option><option value={2}>2 laua raadius</option><option value={3}>3 laua raadius</option></select><small>Arvestatakse ka diagonaalis asuvaid laudu.</small></label>
-            <button className="button button--ghost button--wide group-rule-add" type="button" onClick={addSeparationSet}>+ Lisa seltskond piiranguna</button>
-            {groupRestrictionSets.length > 0 && <div className="group-rule-list">{groupRestrictionSets.map((set, index) => <article key={set.id}><div><strong>Seltskond {index + 1} · {set.radius} laua raadius</strong><span>{set.members.map((id) => { const student = studentById.get(id); return student ? `${student.first_name} ${student.last_name}` : '' }).filter(Boolean).join(', ')}</span></div><button aria-label="Eemalda seltskonna piirang" onClick={() => { setSeparationRules((current) => current.filter((rule, ruleIndex) => (rule.setId || `pair-${ruleIndex}`) !== set.id)); setAssignments([]); setPlannerError('') }}>×</button></article>)}</div>}
+            <div className="separation-subsection"><strong>Kahe õpilase paar</strong><div className="rule-picker"><select value={ruleFirst} onChange={(event) => setRuleFirst(event.target.value)}><option value="">Vali esimene…</option>{plannerStudents.map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><select value={ruleSecond} onChange={(event) => setRuleSecond(event.target.value)}><option value="">Vali teine…</option>{plannerStudents.filter((student) => student.id !== ruleFirst).map((student) => <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>)}</select><button type="button" onClick={addSeparationPair}>+ Lisa</button></div>{pairSeparationRules.length > 0 && <div className="rule-list">{pairSeparationRules.map((rule) => <div key={`${rule.firstId}-${rule.secondId}`}><span>{studentById.get(rule.firstId)?.first_name} ↔ {studentById.get(rule.secondId)?.first_name} · {rule.radius ?? 1} laua raadius</span><button onClick={() => { setSeparationRules((current) => current.filter((item) => item !== rule)); setAssignments([]); setPlannerError('') }}>×</button></div>)}</div>}</div>
+            <div className="separation-subsection"><strong>Terve seltskond</strong><details className="absence-picker group-rule-picker"><summary>Valitud õpilased <span>{groupRuleSelection.size}</span></summary><div><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={groupRuleSearch} onChange={(event) => setGroupRuleSearch(event.target.value)} />{filteredGroupRuleStudents.map((student) => <label key={student.id}><input type="checkbox" checked={groupRuleSelection.has(student.id)} onChange={() => setGroupRuleSelection((current) => { const next = new Set(current); next.has(student.id) ? next.delete(student.id) : next.add(student.id); return next })} /><span>{student.first_name} {student.last_name}</span></label>)}</div></details><button className="button button--ghost button--wide group-rule-add" type="button" onClick={addSeparationSet}>+ Lisa seltskond piiranguna</button></div>
+            {groupRestrictionSets.length > 0 && <div className="group-rule-list">{groupRestrictionSets.map((set, index) => <article key={set.id}><div><strong>Seltskond {index + 1} · {set.radius} laua raadius</strong><span>{set.members.map((id) => { const student = studentById.get(id); return student ? `${student.first_name} ${student.last_name}` : '' }).filter(Boolean).join(', ')}</span></div><button aria-label="Eemalda seltskonna piirang" onClick={() => { setSeparationRules((current) => current.filter((rule) => rule.setId !== set.id)); setAssignments([]); setPlannerError('') }}>×</button></article>)}</div>}
 
             <div className="control-divider" />
             <div><span className="eyebrow">4. Koos istumine</span><h2>Peavad olema koos</h2><p className="control-help">Valitud õpilased paigutatakse kindlasti sama laua taha.</p></div>
@@ -1302,6 +1331,7 @@ function App() {
             {activityType === 'groups' && <><div className="control-divider" /><div><span className="eyebrow">Erisused</span><h2>Ei tohi samas rühmas olla</h2><p className="control-help">Vali ühe piiranguna terve nimistu. Kõik valitud õpilased paigutatakse üksteisest eraldi rühmadesse.</p></div><details className="absence-picker group-rule-picker" open><summary>Valitud õpilased <span>{groupRuleSelection.size}</span></summary><div><input className="picker-search" type="search" placeholder="Otsi õpilast…" value={groupRuleSearch} onChange={(event) => setGroupRuleSearch(event.target.value)} />{filteredGroupRuleStudents.map((student) => <label key={student.id}><input type="checkbox" checked={groupRuleSelection.has(student.id)} onChange={() => setGroupRuleSelection((current) => { const next = new Set(current); next.has(student.id) ? next.delete(student.id) : next.add(student.id); return next })} /><span>{student.first_name} {student.last_name}</span></label>)}</div></details><button className="button button--ghost button--wide group-rule-add" type="button" onClick={addGroupRestrictionSet}>+ Lisa nimistu piiranguna</button>{groupRestrictionSets.length > 0 && <div className="group-rule-list">{groupRestrictionSets.map((set, index) => <article key={set.id}><div><strong>Piirang {index + 1}</strong><span>{set.members.map((id) => { const student = studentById.get(id); return student ? `${student.first_name} ${student.last_name}` : '' }).filter(Boolean).join(', ')}</span></div><button aria-label="Eemalda piirang" onClick={() => { setSeparationRules((current) => current.filter((rule) => rule.setId ? rule.setId !== set.id : !set.members.includes(rule.firstId) || !set.members.includes(rule.secondId))); setGroups([]); setPlannerError('') }}>×</button></article>)}</div>}</>}
             {plannerError && <div className="notice notice--error" role="alert">{plannerError}</div>}
             <button className="button button--wide draw-button" onClick={() => generatePlan(activityType === 'seating' && drawMode === 'guided' && planGenerated)}>{resultGenerated ? activityType === 'groups' ? '🎲 Loosi rühmad uuesti' : drawMode === 'guided' ? '🎲 Loosi lukustamata kohad' : '🎲 Loosi uuesti' : activityType === 'groups' ? '🎲 Loosi rühmad' : '🎲 Loo isteplaan'}</button>
+            <button type="button" className="planner-resizer" aria-label="Muuda külgpaneeli laiust" title="Lohista külgpaneeli laiuse muutmiseks" onPointerDown={(event) => { event.preventDefault(); setResizingPlannerSidebar(true) }} onKeyDown={(event) => { if (event.key === 'ArrowLeft') setPlannerSidebarWidth((width) => Math.max(340, width - 20)); if (event.key === 'ArrowRight') setPlannerSidebarWidth((width) => Math.min(560, width + 20)) }}><span /></button>
           </aside>
 
           <section className="planner-preview">
