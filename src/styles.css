@@ -223,14 +223,19 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .planner-topbar > div { display: flex; align-items: center; gap: 14px; color: #708078; font-size: 13px; }
 .planner-topbar > strong { font-family: Manrope, sans-serif; }
 .back-button { padding: 9px 12px; border: 0; border-radius: 10px; background: #e8efea; color: #17382f; font-weight: 700; cursor: pointer; }
-.planner-layout { min-height: calc(100vh - 68px); display: grid; grid-template-columns: 370px 1fr; }
-.planner-controls { padding: 28px; border-right: 1px solid #dbe5dd; background: #fff; overflow: auto; }
+.planner-layout { min-height: calc(100vh - 68px); display: grid; grid-template-columns: var(--planner-sidebar-width, 410px) minmax(0, 1fr); }
+.planner-controls { position: relative; padding: 32px; border-right: 1px solid #dbe5dd; background: #fff; overflow: auto; font-size: 15px; }
+.planner-resizer { position: fixed; z-index: 25; top: 68px; left: calc(var(--planner-sidebar-width, 410px) - 6px); width: 12px; height: calc(100vh - 68px); padding: 0; border: 0; background: transparent; cursor: col-resize; touch-action: none; }
+.planner-resizer::before { content: ''; position: absolute; inset: 0 4px; background: transparent; transition: background .15s ease, box-shadow .15s ease; }
+.planner-resizer:hover::before, .planner-resizer:focus-visible::before, .planner-sidebar-resizing .planner-resizer::before { background: #6f9b86; box-shadow: 0 0 0 3px rgba(111,155,134,.16); }
+.planner-resizer span { position: absolute; top: 50%; left: 1px; width: 10px; height: 44px; translate: 0 -50%; border: 1px solid #cad8ce; border-radius: 8px; background: #fff; box-shadow: 0 3px 10px rgba(23,56,47,.12); }
+.planner-sidebar-resizing, .planner-sidebar-resizing * { cursor: col-resize !important; user-select: none !important; }
 .planner-controls h2 { font-size: 22px; }
 .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
 .option-grid--three { grid-template-columns: repeat(3, 1fr); }
 .option-grid button { display: grid; gap: 4px; padding: 14px 12px; border: 1px solid #d9e4dc; border-radius: 12px; background: #fafcfb; color: #17382f; text-align: left; cursor: pointer; }
 .option-grid button.active { border-color: #3c745f; background: #eaf3ed; box-shadow: inset 0 0 0 1px #3c745f; }
-.option-grid button span { color: #78867e; font-size: 11px; line-height: 1.35; }
+.option-grid button span { color: #78867e; font-size: 12px; line-height: 1.4; }
 .mixed-gender-toggle { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid #d9e4dc; border-radius: 12px; background: #fafcfb; cursor: pointer; }
 .mixed-gender-toggle.active { border-color: #3c745f; background: #eaf3ed; box-shadow: inset 0 0 0 1px #3c745f; }
 .mixed-gender-toggle input { width: auto; margin-top: 2px; accent-color: #27634f; }
@@ -238,7 +243,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .mixed-gender-toggle strong { color: #17382f; font-size: 13px; }
 .mixed-gender-toggle small { color: #728078; font-size: 11px; line-height: 1.4; }
 .number-fields { display: grid; grid-template-columns: 1fr 1fr .8fr; gap: 9px; margin-top: 12px; }
-.number-fields label, .number-fields > div { display: grid; gap: 5px; color: #728078; font-size: 11px; font-weight: 700; }
+.number-fields label, .number-fields > div { display: grid; gap: 5px; color: #728078; font-size: 12px; font-weight: 700; }
 .number-fields input { padding: 9px 10px; }
 .number-fields > div { place-items: center; padding: 8px; border-radius: 11px; background: #edf3ef; }
 .number-fields strong { color: #27634f; font-size: 20px; }
@@ -266,14 +271,17 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
 .absence-picker summary span { float: right; min-width: 22px; padding: 2px 6px; border-radius: 999px; background: #f6dfdb; color: #923d34; text-align: center; }
 .absence-picker > div { max-height: 210px; overflow: auto; display: grid; gap: 1px; padding: 4px 8px 9px; }
 .absence-picker .picker-search { position: sticky; top: 0; z-index: 1; width: 100%; margin-bottom: 5px; padding: 9px 10px; border: 1px solid #d5e1d8; border-radius: 9px; background: #fff; box-shadow: 0 4px 10px rgba(26, 65, 52, .06); }
-.absence-picker label { display: flex; align-items: center; gap: 8px; padding: 7px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.absence-picker label { display: flex; align-items: center; gap: 8px; padding: 8px 7px; border-radius: 8px; font-size: 13px; cursor: pointer; }
 .absence-picker label:hover { background: #edf3ef; }
 .absence-picker input { width: auto; }
 .absence-picker .picker-search { width: 100%; }
 .picker-empty { padding: 9px 7px; color: #7c8982; }
 .solo-picker { margin-top: 12px; background: #f8f4ea; border-color: #e6dcc5; }
 .control-divider { height: 1px; margin: 24px 0; background: #e5ebe7; }
-.control-help { margin: 7px 0 0; color: #78867e; font-size: 12px; line-height: 1.45; }
+.control-help { margin: 7px 0 0; color: #78867e; font-size: 13px; line-height: 1.5; }
+.separation-subsection { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid #e0e8e2; border-radius: 12px; background: #fbfcfb; }
+.separation-subsection > strong { color: #285f4d; font-size: 13px; }
+.separation-subsection .rule-picker, .separation-subsection .absence-picker { margin-top: 0; }
 .rule-picker { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-top: 12px; }
 .rule-picker select { min-width: 0; padding: 9px 7px; border: 1px solid #cad7ce; border-radius: 9px; color: #17382f; background: #fbfcfb; font-size: 11px; }
 .rule-picker button { padding: 0 10px; border: 0; border-radius: 9px; background: #e7eee9; color: #27634f; font-weight: 800; cursor: pointer; }
@@ -444,6 +452,7 @@ textarea:focus { border-color: #3c745f; box-shadow: 0 0 0 4px rgba(60, 116, 95, 
   .modal { padding: 24px 20px; max-height: calc(100vh - 24px); }
   .planner-layout { grid-template-columns: 1fr; }
   .planner-controls { border-right: 0; border-bottom: 1px solid #dbe5dd; }
+  .planner-resizer { display: none; }
   .planner-preview { padding: 24px 16px; }
   .classroom-canvas { min-height: 520px; padding: 24px 12px 18px; overflow-x: auto; }
   .desk-grid { min-width: 560px; gap: 22px 18px; }
